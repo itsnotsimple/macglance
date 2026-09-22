@@ -46,6 +46,11 @@ struct SettingsView: View {
                     }
                 }
                 Toggle(tr("Проверявай автоматично веднъж на ден", "Check automatically once a day"), isOn: $settings.autoUpdateCheck)
+                HStack {
+                    Text(tr("Твоята версия: ", "Your version: ") + updater.currentVersion).foregroundStyle(.secondary)
+                    Spacer()
+                    Link(tr("Виж в GitHub", "See on GitHub"), destination: URL(string: "https://github.com/\(Updater.repository)/releases")!)
+                }
             } header: {
                 Text(tr("Обновления", "Updates"))
             } footer: {
