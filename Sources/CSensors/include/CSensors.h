@@ -47,10 +47,14 @@ bool ssd_smart(SSDSmart *out);
 /// macOS's thermal pressure: 0 nominal, 1 moderate, 2 heavy, 3 trapping, 4 sleeping. -1 if unknown.
 int thermal_pressure_level(void);
 
-/// Average speed of each core cluster while working (idle time left out), and its top speed.
+/// Average speed of each core cluster while working (idle time left out), and its top speed,
+/// plus the same per core (in the order ECPU0, ECPU1… / PCPU0, PCPU1…). 0 = no work in the period.
 typedef struct {
     double eMHz, eMaxMHz;   // efficiency cores
-    double pMHz, pMaxMHz;   // performance ("Super" on M5) cores; 0 = no work in the period
+    double pMHz, pMaxMHz;   // performance ("Super" on M5) cores
+    int eCount, pCount;
+    double eCoreMHz[16];
+    double pCoreMHz[16];
 } CPUFrequencies;
 
 /// Speeds since the previous call. False on the first call (baseline) or if the Mac doesn't say.

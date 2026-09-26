@@ -88,6 +88,7 @@ bool cpu_frequencies(CPUFrequencies *out) {
     if (!delta) return false;
 
     double eWeighted = 0, eActive = 0, pWeighted = 0, pActive = 0;
+    memset(out, 0, sizeof *out);
     CFArrayRef items = CFDictionaryGetValue(delta, CFSTR("IOReportChannels"));
     for (CFIndex i = 0; items && i < CFArrayGetCount(items); i++) {
         CFDictionaryRef item = CFArrayGetValueAtIndex(items, i);
@@ -95,19 +96,29 @@ bool cpu_frequencies(CPUFrequencies *out) {
         CFStringGetCString(IOReportChannelGetChannelName(item), channel, sizeof channel, kCFStringEncodingUTF8);
         bool isP = strncmp(channel, "PCPU", 4) == 0, isE = strncmp(channel, "ECPU", 4) == 0;
         if (!isP && !isE) continue;
+        int core = atoi(channel + 4);   // "PCPU2" → 2
+        double coreWeighted = 0, coreActive = 0;
         for (int s = 0; s < IOReportStateGetCount(item); s++) {
             int step = step_of(IOReportStateGetNameForIndex(item, s));
             double time = (double)IOReportStateGetResidency(item, s);
             if (step < 0 || time <= 0) continue;
-            if (isP && step < pCount) { pWeighted += pSteps[step] * time; pActive += time; }
-            if (isE && step < eCount) { eWeighted += eSteps[step] * time; eActive += time; }
+            double mhz = isP ? (step < pCount ? pSteps[step] : 0) : (step < eCount ? eSteps[step] : 0);
+            if (mhz <= 0) continue;
+            coreWeighted += mhz * time;
+            coreActive += time;
+        }
+        if (isP) { pWeighted += coreWeighted; pActive += coreActive; }
+        else { eWeighted += coreWeighted; eActive += coreActive; }
+        if (core >= 0 && core < 16) {
+            double average = coreActive > 0 ? coreWeighted / coreActive : 0;
+            if (isP) { out->pCoreMHz[core] = average; if (core + 1 > out->pCount) out->pCount = core + 1; }
+            else { out->eCoreMHz[core] = average; if (core + 1 > out->eCount) out->eCount = core + 1; }
         }
     }
     CFRelease(delta);
     out->eMHz = eActive > 0 ? eWeighted / eActive : 0;
     out->pMHz = pActive > 0 ? pWeighted / pActive : 0;
-    out->eMaxMHz = 0;
-    out->pMaxMHz = 0;
+
     for (int i = 0; i < eCount; i++) if (eSteps[i] > out->eMaxMHz) out->eMaxMHz = eSteps[i];
     for (int i = 0; i < pCount; i++) if (pSteps[i] > out->pMaxMHz) out->pMaxMHz = pSteps[i];
     return true;

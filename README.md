@@ -18,7 +18,7 @@ It stays light: about 12 MB of memory and ~0.2% CPU with only the menu bar; sens
 
 ## Install
 
-Download the latest `MacGlance-x.y.zip` from [Releases](https://github.com/itsnotsimple/macglance/releases), unzip it and move `MacGlance.app` to Applications. After that it updates itself (Settings → Updates).
+Download the latest `MacGlance-x.y.dmg` from [Releases](https://github.com/itsnotsimple/macglance/releases), open it and drag MacGlance onto Applications. After that it updates itself (Settings → Updates).
 
 The app isn't notarized by Apple, so the first time macOS may refuse to open it: right-click → Open, or System Settings → Privacy & Security → Open Anyway.
 
