@@ -1,31 +1,99 @@
-# MacGlance
+<p align="center">
+  <img src="docs/icon.png" width="128" alt="MacGlance icon">
+</p>
 
-A light menu bar monitor for Apple Silicon Macs: CPU, GPU, RAM, watts, disk, network and temperatures at a glance, in Bulgarian or English.
+<h1 align="center">MacGlance</h1>
 
-![icon](Resources/AppIcon.png)
+<p align="center">
+  A light menu bar monitor for Apple Silicon Macs.<br>
+  CPU, GPU, RAM, watts, disk, network, temperatures and battery at a glance, in English or Bulgarian.
+</p>
+
+<p align="center">
+  <a href="https://github.com/itsnotsimple/macglance/releases/latest"><img src="https://img.shields.io/github/v/release/itsnotsimple/macglance?label=download" alt="Latest release"></a>
+  <img src="https://img.shields.io/badge/macOS-14%2B-blue" alt="macOS 14 or later">
+  <img src="https://img.shields.io/badge/Apple%20Silicon-native-black" alt="Apple Silicon">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT license"></a>
+</p>
+
+<p align="center">
+  <img src="docs/menubar.png" width="234" alt="MacGlance in the menu bar, dark and light">
+</p>
+
+<p align="center">
+  <img src="docs/cpu.png" width="720" alt="The CPU page: load, per-core meters with a detail panel, history">
+</p>
 
 ## What it shows
 
-- **Menu bar:** CPU, GPU, RAM, watts, and optionally network, free disk space and CPU temperature, in compact two-line blocks.
-- **CPU / GPU:** load per core (P and E), real core speeds, which apps use the most, history up to 7 days.
-- **RAM:** pressure, the apps holding the most memory, a "Free up RAM" button and automatic cleanup.
-- **Energy:** watts per app (measured by macOS), electricity used per day and what it costs.
-- **Disk:** free space, read/write speed, SSD health from the drive itself (wear, data written).
-- **Network:** speed, latency, Wi-Fi signal, today's traffic (with a heads-up on an iPhone hotspot).
-- **Temperatures and thermal throttling, battery health** with tips, **smart notifications**, global shortcuts.
+**In the menu bar:** CPU, GPU, RAM and watts in compact two-line blocks that never shift around; network speed, free disk space and CPU temperature if you want them. Click for a menu with every number, the apps using the most energy, and a "Free up RAM" button.
 
-It stays light: about 12 MB of memory and ~0.2% CPU with only the menu bar; sensors you hide aren't read at all.
+**In its window:**
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/gpu.png" alt="GPU page"><br><b>GPU</b>: load, watts, temperature, memory, which apps use it</td>
+    <td width="50%"><img src="docs/ram.png" alt="RAM page"><br><b>RAM</b>: memory pressure, the apps holding the most, free up RAM by hand or automatically</td>
+  </tr>
+  <tr>
+    <td><img src="docs/energy.png" alt="Energy page"><br><b>Energy</b>: watts per app as measured by macOS, energy per day and what it costs</td>
+    <td><img src="docs/disk.png" alt="Disk page"><br><b>Disk</b>: free space, read/write speed, SSD health straight from the drive (wear, data written)</td>
+  </tr>
+  <tr>
+    <td><img src="docs/network.png" alt="Network page"><br><b>Network</b>: speed, latency, Wi-Fi signal, today's traffic (with a heads-up on an iPhone hotspot)</td>
+    <td><img src="docs/temperature.png" alt="Temperatures page"><br><b>Temperatures</b>: CPU, GPU, SSD and battery, plus whether macOS is slowing the chip down because of heat</td>
+  </tr>
+  <tr>
+    <td><img src="docs/battery.png" alt="Battery page"><br><b>Battery</b>: health, cycles, capacity, charger, and tips for what it's doing right now</td>
+    <td><img src="docs/settings.png" alt="Settings page"><br><b>Settings</b>: language, what goes in the menu bar, notifications, global shortcuts, updates</td>
+  </tr>
+</table>
+
+Charts go back 3 minutes, 1 or 2 hours, 24 hours or 7 days, and their history survives restarts. Optional notifications tell you when an app is stuck at 100% CPU, memory runs short, the charger can't keep up, the battery gets hot, or the chip is slowed down by heat.
 
 ## Install
 
-Download the latest `MacGlance-x.y.dmg` from [Releases](https://github.com/itsnotsimple/macglance/releases), open it and drag MacGlance onto Applications. After that it updates itself (Settings → Updates).
+1. Download `MacGlance-x.y.dmg` from [Releases](https://github.com/itsnotsimple/macglance/releases/latest).
+2. Open it and drag MacGlance onto Applications.
+3. The app isn't notarized by Apple, so the first time macOS may refuse to open it: right-click it and choose **Open**, or go to System Settings → Privacy & Security → **Open Anyway**.
 
-The app isn't notarized by Apple, so the first time macOS may refuse to open it: right-click → Open, or System Settings → Privacy & Security → Open Anyway.
+After that it updates itself (Settings → Updates). Every update is signed, and MacGlance only installs one whose signature matches.
 
-## Build
+**Needs** macOS 14 Sonoma or later on an Apple Silicon Mac. It's built and tested on a MacBook Air M5; other Apple Silicon Macs should work, though a few sensors may read differently, and anything a Mac doesn't report is simply left out.
 
-Needs macOS 14+ and the Xcode Command Line Tools (full Xcode isn't required).
+## Light by design
+
+- Native Swift, no Electron, no helper services running in the background.
+- Numbers you hide from the menu bar aren't read at all. Scanning every process and reading the detailed sensors happen only while their page or the menu is open.
+- On an M5 MacBook Air it uses about 1% of one core and 55 MB of memory with its window open, and less with only the menu bar.
+
+## Privacy
+
+No account, no analytics. MacGlance only goes online to check GitHub for updates (once a day, can be turned off), and, while the Network page is open, to ask Cloudflare's 1.1.1.1 for your latency and public IP. All history stays on your Mac, in `~/Library/Application Support/MacGlance`.
+
+## How it measures
+
+| What | Where it comes from |
+|---|---|
+| CPU and GPU load | the kernel's per-core tick counters; the GPU driver's own statistics |
+| Watts | the SMC's power rails (matched to CPU, GPU and the whole system by load tests) |
+| Watts per app | the energy macOS records for every process, plus each app's share of GPU time |
+| Temperatures | SMC and HID sensors |
+| Thermal throttling, real core speeds | macOS's thermal pressure level and IOReport's time at each speed step |
+| SSD health | the drive's NVMe SMART log |
+
+## Build from source
+
+Needs the Xcode Command Line Tools (full Xcode isn't required).
 
 ```sh
 ./scripts/build-app.sh --install   # builds build/MacGlance.app and copies it to /Applications
 ```
+
+## На български
+
+MacGlance е лек монитор за лентата горе на Mac с Apple Silicon: процесор, видеокарта, RAM, ватове, диск, мрежа, температури и батерия. Свали `.dmg` файла от [Releases](https://github.com/itsnotsimple/macglance/releases/latest), отвори го и плъзни MacGlance в Applications. Първия път: десен бутон → **Open**. След това се обновява сам. Езикът се сменя от Настройки → Език.
+
+## License
+
+[MIT](LICENSE)
