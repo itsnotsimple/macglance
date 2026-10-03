@@ -4,6 +4,7 @@ struct SettingsView: View {
     @ObservedObject private var settings = Settings.shared   // (no @State: it's a macro that needs full Xcode)
     @ObservedObject private var hotkeys = HotkeyCenter.shared
     @ObservedObject private var updater = Updater.shared
+    @ObservedObject private var widgets = DesktopWidgets.shared
 
     private let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
 
@@ -72,6 +73,31 @@ struct SettingsView: View {
                         settings.objectWillChange.send()   // redraw the view
                     }
                 ))
+            }
+
+            Section {
+                ForEach(WidgetKind.allCases) { kind in
+                    HStack {
+                        Toggle(isOn: Binding(get: { widgets.isOn(kind) }, set: { widgets.setOn(kind, $0) })) {
+                            Label(kind.title, systemImage: kind.icon)
+                        }
+                        if let config = widgets.configs[kind] {
+                            Picker("", selection: Binding(get: { config.size }, set: { widgets.setSize(kind, $0) })) {
+                                ForEach(WidgetSize.allCases, id: \.self) { Text($0.title).tag($0) }
+                            }
+                            .pickerStyle(.segmented)
+                            .labelsHidden()
+                            .fixedSize()
+                        }
+                    }
+                }
+            } header: {
+                Text(tr("Уиджети на десктопа", "Desktop widgets"))
+            } footer: {
+                Text(tr("Стоят на десктопа зад прозорците, на всички Spaces. Мести ги с мишката; с десен бутон сменяш размера или ги махаш.",
+                        "They sit on the desktop behind your windows, on every Space. Drag them anywhere; right-click to resize or remove."))
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
             }
 
             Section {

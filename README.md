@@ -49,6 +49,12 @@
   </tr>
 </table>
 
+**On the desktop:** seven widgets (CPU, GPU, RAM, power, network, temperature, battery), small or wide, updating live behind your windows on every Space. Turn them on in Settings → Desktop widgets and drag them anywhere.
+
+<p align="center">
+  <img src="docs/widgets.png" width="720" alt="Desktop widgets: CPU and network wide, GPU, RAM, power, temperature and battery small">
+</p>
+
 Charts go back 3 minutes, 1 or 2 hours, 24 hours or 7 days, and their history survives restarts. Optional notifications tell you when an app is stuck at 100% CPU, memory runs short, the charger can't keep up, the battery gets hot, or the chip is slowed down by heat.
 
 ## Install
@@ -92,7 +98,7 @@ Needs the Xcode Command Line Tools (full Xcode isn't required).
 
 ## На български
 
-MacGlance е лек монитор за лентата горе на Mac с Apple Silicon: процесор, видеокарта, RAM, ватове, диск, мрежа, температури и батерия. Свали `.dmg` файла от [Releases](https://github.com/itsnotsimple/macglance/releases/latest), отвори го и плъзни MacGlance в Applications. Първия път: десен бутон → **Open**. След това се обновява сам. Езикът се сменя от Настройки → Език.
+MacGlance е лек монитор за лентата горе на Mac с Apple Silicon: процесор, видеокарта, RAM, ватове, диск, мрежа, температури и батерия, плюс уиджети на десктопа. Свали `.dmg` файла от [Releases](https://github.com/itsnotsimple/macglance/releases/latest), отвори го и плъзни MacGlance в Applications. Първия път: десен бутон → **Open**. След това се обновява сам. Езикът се сменя от Настройки → Език.
 
 ## License
 
