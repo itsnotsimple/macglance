@@ -22,10 +22,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let store = MetricStore.shared
     private var lastTemperatureRecord = Date.distantPast
     private var lastSSDCheck = Date.distantPast
-    private let widgets = DesktopWidgets.shared
-    private let batteryReader = BatteryReader()
-    private var lastWidgetTemperature = Date.distantPast
-    private var lastWidgetBattery = Date.distantPast
     private var timer: Timer?
     private var shownItems: [BarItem]?   // what the compact image currently shows
 
@@ -53,8 +49,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         termination.resume()
         terminationSignal = termination
 
-        widgets.openApp = { [weak self] in self?.appWindow.show() }
-        widgets.showAll()   // put the saved desktop widgets back
+        UserDefaults.standard.removeObject(forKey: "widgets")   // settings of the old desktop cards (v0.27)
 
         HotkeyCenter.shared.handlers = [
             .openWindow: { [weak self] in self?.appWindow.show() },
@@ -102,8 +97,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func tick() {
         // Hidden numbers are not read at all, unless the menu is open and needs them.
         let menuOpen = infoMenu.isOpen
-        let refreshWidgets = widgets.shouldRefresh()
-        let mem = settings.showRAM || menuOpen || (refreshWidgets && widgets.isOn(.ram)) ? memory.read() : nil
+        let mem = settings.showRAM || menuOpen ? memory.read() : nil
         let pwr = power.read()   // always: feeds the watts chart (~1 ms)
         if let pwr {
             store.record(.power, pwr.system)
@@ -176,29 +170,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             _ = SSDReader().read()
         }
 
-        if refreshWidgets { updateWidgets(cpu: cpuLoad, gpu: gpuStats, memory: mem, power: pwr, network: net) }
+        WidgetPublisher.shared.tick(cpu: cpuLoad, gpu: gpuStats, memory: mem, power: pwr, network: net)   // only if widgets are placed
 
         let topApps = menuOpen ? energy.top(3, gpuWatts: pwr?.gpu ?? 0) : []   // scanning all processes: only when looked at
         infoMenu.update(memory: mem, power: pwr, disk: dsk, network: net, temperature: temp, topApps: topApps)
-    }
-
-    /// Hands the numbers to the desktop widgets. Temperatures (~4 ms of SMC calls) at most every 5 s
-    /// and the battery every 10 s, only when their widget is on.
-    private func updateWidgets(cpu: CPULoad?, gpu: GPUStats?, memory: MemoryUsage?, power: PowerUsage?, network: NetworkUsage?) {
-        let data = widgets.data
-        data.cpu = cpu
-        data.gpu = gpu
-        data.memory = memory
-        data.power = power
-        if let network { data.network = network }
-        if widgets.isOn(.temperature), Date().timeIntervalSince(lastWidgetTemperature) >= 5 {
-            lastWidgetTemperature = Date()
-            data.temperatures = temperature.read()
-        }
-        if widgets.isOn(.battery), Date().timeIntervalSince(lastWidgetBattery) >= 10 {
-            lastWidgetBattery = Date()
-            data.battery = batteryReader.read()
-        }
     }
 
     /// Redraws the menu bar only when what it shows actually changed.

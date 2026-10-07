@@ -13,6 +13,16 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp .build/release/MacGlance "$APP/Contents/MacOS/"
 cp Resources/Info.plist "$APP/Contents/"
 cp Resources/AppIcon.icns "$APP/Contents/Resources/"
+
+# The widgets: an app extension inside the app, sandboxed, at the app's version.
+WIDGETS="$APP/Contents/PlugIns/MacGlanceWidgets.appex"
+mkdir -p "$WIDGETS/Contents/MacOS"
+cp .build/release/MacGlanceWidgets "$WIDGETS/Contents/MacOS/"
+cp Resources/Widgets-Info.plist "$WIDGETS/Contents/Info.plist"
+VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" Resources/Info.plist)
+/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$WIDGETS/Contents/Info.plist"
+codesign --force --sign - --entitlements Resources/Widgets.entitlements "$WIDGETS"
+
 codesign --force --sign - "$APP"   # ad-hoc signature, enough to run locally
 echo "Built $APP"
 
