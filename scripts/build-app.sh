@@ -21,10 +21,13 @@ cp .build/release/MacGlanceWidgets "$WIDGETS/Contents/MacOS/"
 cp Resources/Widgets-Info.plist "$WIDGETS/Contents/Info.plist"
 VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" Resources/Info.plist)
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$WIDGETS/Contents/Info.plist"
-codesign --force --sign - --entitlements Resources/Widgets.entitlements "$WIDGETS"
-
-codesign --force --sign - "$APP"   # ad-hoc signature, enough to run locally
-echo "Built $APP"
+# Signing: the free "Apple Development" certificate if this Mac has one (macOS only runs widget
+# extensions with a certificate from Apple), otherwise ad-hoc (the app itself still runs, widgets don't).
+IDENTITY=$(security find-identity -v -p codesigning 2>/dev/null | awk '/"Apple Development:/ {print $2; exit}')
+SIGN=${IDENTITY:--}
+codesign --force --sign "$SIGN" --entitlements Resources/Widgets.entitlements "$WIDGETS"
+codesign --force --sign "$SIGN" "$APP"
+echo "Built $APP ($([[ $SIGN == - ]] && echo 'ad-hoc signature: no widgets' || echo 'signed with Apple Development'))"
 
 case "${1:-}" in
     --run)
