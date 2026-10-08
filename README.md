@@ -61,7 +61,13 @@ Charts go back 3 minutes, 1 or 2 hours, 24 hours or 7 days, and their history su
 
 1. Download `MacGlance-x.y.dmg` from [Releases](https://github.com/itsnotsimple/macglance/releases/latest).
 2. Open it and drag MacGlance onto Applications.
-3. The app isn't notarized by Apple, so the first time macOS may refuse to open it: right-click it and choose **Open**, or go to System Settings → Privacy & Security → **Open Anyway**.
+3. MacGlance is a free project and isn't notarized by Apple, so the first time macOS may say it "is damaged" or "can't be checked". Open Terminal and run:
+
+   ```sh
+   xattr -cr /Applications/MacGlance.app
+   ```
+
+   That clears the "downloaded from the internet" flag your browser put on it. Or open System Settings → Privacy & Security and click **Open Anyway**.
 
 After that it updates itself (Settings → Updates). Every update is signed, and MacGlance only installs one whose signature matches.
 
@@ -98,7 +104,7 @@ Needs the Xcode Command Line Tools (full Xcode isn't required).
 
 ## На български
 
-MacGlance е лек монитор за лентата горе на Mac с Apple Silicon: процесор, видеокарта, RAM, ватове, диск, мрежа, температури и батерия, плюс уиджети на десктопа. Свали `.dmg` файла от [Releases](https://github.com/itsnotsimple/macglance/releases/latest), отвори го и плъзни MacGlance в Applications. Първия път: десен бутон → **Open**. След това се обновява сам. Езикът се сменя от Настройки → Език.
+MacGlance е лек монитор за лентата горе на Mac с Apple Silicon: процесор, видеокарта, RAM, ватове, диск, мрежа, температури и батерия, плюс уиджети на десктопа. Свали `.dmg` файла от [Releases](https://github.com/itsnotsimple/macglance/releases/latest), отвори го и плъзни MacGlance в Applications. Първия път, ако macOS каже, че е „повреден“: в Terminal пусни `xattr -cr /Applications/MacGlance.app`. След това се обновява сам. Езикът се сменя от Настройки → Език.
 
 ## License
 
