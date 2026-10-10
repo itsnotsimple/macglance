@@ -16,7 +16,10 @@ let package = Package(
             name: "MacGlanceWidgets",
             dependencies: ["Shared"],
             path: "Sources/MacGlanceWidgets",
-            swiftSettings: [.swiftLanguageMode(.v5)]
+            // What Xcode does for every app extension: build it extension-safe and start it through
+            // Foundation's NSExtensionMain, which sets up the extension before WidgetKit's @main runs.
+            swiftSettings: [.swiftLanguageMode(.v5), .unsafeFlags(["-application-extension"])],
+            linkerSettings: [.unsafeFlags(["-Xlinker", "-e", "-Xlinker", "_NSExtensionMain"])]
         ),
         // What the app and the widgets both need: the snapshot file the app writes and the widgets read.
         .target(
