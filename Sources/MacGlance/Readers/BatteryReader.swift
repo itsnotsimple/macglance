@@ -17,7 +17,7 @@ struct BatteryInfo {
     let adapterWatts: Int?        // what the charger is rated for
 
     /// Capacity left compared to new, from the mAh numbers (the way coconutBattery counts it).
-    var capacityPercent: Double { Double(fullCapacity) / Double(designCapacity) * 100 }
+    var capacityPercent: Double { Double(fullCapacity) / Double(max(designCapacity, 1)) * 100 }   // 0 on a failing battery
 }
 
 /// Everything the battery controller reports (no admin rights needed).

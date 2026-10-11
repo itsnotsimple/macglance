@@ -78,6 +78,7 @@ final class HotkeyCenter: ObservableObject {
             var id = EventHotKeyID()
             GetEventParameter(event, EventParamName(kEventParamDirectObject), EventParamType(typeEventHotKeyID),
                               nil, MemoryLayout<EventHotKeyID>.size, nil, &id)
+            guard id.signature == 0x4D47_6C63, Action.allCases.indices.contains(Int(id.id)) else { return OSStatus(eventNotHandledErr) }
             let action = Action.allCases[Int(id.id)]
             DispatchQueue.main.async { HotkeyCenter.shared.handlers[action]?() }
             return noErr

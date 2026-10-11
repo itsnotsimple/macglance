@@ -20,6 +20,7 @@ final class Alerts {
     private var active: Set<Kind> = []                                // reported and not cleared yet
     private var busySince: [pid_t: Date] = [:]                         // apps above 90% CPU, since when
     private var reportedRunaways: Set<pid_t> = []
+    private var lastRunawayCheck = Date.distantPast
     private var weakChargerSince: Date?
     private let runawayAfter: TimeInterval
     private let post: (_ title: String, _ body: String) -> Void
@@ -94,6 +95,10 @@ final class Alerts {
     func checkRunaways() {
         guard settings.alertRunaway else { return }
         let now = Date()
+        // A long pause since the last check (the Mac slept) breaks the "5 minutes straight":
+        // that time wasn't spent busy, so start counting again.
+        if now.timeIntervalSince(lastRunawayCheck) > 180 { busySince = [:] }
+        lastRunawayCheck = now
         let busy = processes.top(20).filter { $0.percent >= 90 }   // average over the last minute
         busySince = busySince.filter { pid, _ in busy.contains { $0.id == pid } }
         reportedRunaways = reportedRunaways.filter { pid in busy.contains { $0.id == pid } }
