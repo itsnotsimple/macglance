@@ -42,9 +42,17 @@ final class PowerReader {
                           battery: batteryWatts())
     }
 
+    private var checkedKeys: Set<String> = []   // keys whose type was already confirmed as float
+
+    /// The first read of a key also asks the SMC for its type; later reads skip that (half the calls).
     private func smc(_ key: String) -> Double? {
         var value: Float = 0
-        return smc_read_float(key, &value) ? Double(value) : nil
+        if checkedKeys.contains(key) {
+            return smc_read_known_float(key, &value) ? Double(value) : nil
+        }
+        guard smc_read_float(key, &value) else { return nil }
+        checkedKeys.insert(key)
+        return Double(value)
     }
 
     /// Voltage × current straight from the battery controller.
