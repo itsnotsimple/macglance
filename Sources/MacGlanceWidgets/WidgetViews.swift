@@ -64,7 +64,9 @@ extension Kind {
 struct MetricView: View {
     let kind: Kind
     let entry: Entry
-    @Environment(\.widgetFamily) private var family
+    var previewFamily: WidgetFamily? = nil   // for README screenshots; macOS sets the real one
+    @Environment(\.widgetFamily) private var hostFamily
+    private var family: WidgetFamily { previewFamily ?? hostFamily }
 
     var body: some View {
         Group {
