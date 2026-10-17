@@ -60,10 +60,11 @@ final class InfoMenu: NSObject, NSMenuDelegate {
         add(.diskWrite, indent: 1)
         add(.network)
         menu.addItem(.separator())
-        let settings = NSMenuItem(title: tr("Настройки…", "Settings…"), action: #selector(settingsClicked), keyEquivalent: ",")
+        // No key equivalents here: one would add a shortcut column, i.e. empty space right of every value.
+        let settings = NSMenuItem(title: tr("Настройки…", "Settings…"), action: #selector(settingsClicked), keyEquivalent: "")
         settings.target = self
         menu.addItem(settings)
-        menu.addItem(withTitle: tr("Изход", "Quit"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        menu.addItem(withTitle: tr("Изход", "Quit"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "")
         refresh()
     }
 
@@ -134,8 +135,10 @@ final class InfoMenu: NSObject, NSMenuDelegate {
             if topApps.indices.contains(index) {
                 let app = topApps[index]
                 set(row, watts(app.watts), label: app.name)
+                rows[row]?.isHidden = false
             } else {
-                set(row, index == 0 ? "…" : "", label: "")   // "…" until the first measurement
+                set(row, "…", label: "")                          // "…" until the first measurement
+                rows[row]?.isHidden = !(index == 0 && topApps.isEmpty)   // no blank rows when fewer than 3 apps
             }
         }
         if let t = temperature {

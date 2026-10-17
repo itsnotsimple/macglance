@@ -58,11 +58,11 @@ enum BatteryTips {
 
         // On battery: how long at this pace, and what eats the most.
         if !b.isPluggedIn, let power = s.power, power.system > 0.5 {
-            let wattHours = Double(b.charge) * b.voltage / 1000
-            let hours = wattHours / power.system
-            tips.append(.init(kind: .info, text: tr(
-                "При сегашната консумация (\(watts(power.system))) ще издържи още около \(String(format: "%.1f", hours)) ч.",
-                "At the current draw (\(watts(power.system))) it will last about \(String(format: "%.1f", hours)) more hours.")))
+            if let hours = hoursLeft(b, at: power.system) {
+                tips.append(.init(kind: .info, text: tr(
+                    "При сегашната консумация (\(watts(power.system))) ще издържи още около \(durationText(hours)).",
+                    "At the current draw (\(watts(power.system))) it will last about \(durationText(hours)) more.")))
+            }
             if power.other / power.system > 0.6 {
                 tips.append(.init(kind: .info, text: tr(
                     "Най-много енергия отива за екрана и останалото (\(watts(power.other)) от \(watts(power.system))). По-ниската яркост удължава батерията най-много.",
@@ -93,6 +93,21 @@ enum BatteryTips {
             }
         }
         return tips
+    }
+
+    /// Energy left ÷ draw. The controller sometimes reports 0 mAh left while on battery; then the
+    /// charge comes from the percentage instead. Nil when it still doesn't add up (no tip beats a wrong one).
+    private static func hoursLeft(_ b: BatteryInfo, at draw: Double) -> Double? {
+        let milliampHours = b.charge > 0 ? Double(b.charge) : Double(b.fullCapacity) * Double(b.percent) / 100
+        let hours = milliampHours * b.voltage / 1000 / draw
+        return hours.isFinite && hours >= 0.1 && hours < 100 ? hours : nil
+    }
+
+    /// "45 мин", "3 ч 20 мин".
+    private static func durationText(_ hours: Double) -> String {
+        let minutes = Int((hours * 60).rounded())
+        return minutes < 60 ? tr("\(minutes) мин", "\(minutes) min")
+                            : tr("\(minutes / 60) ч \(minutes % 60) мин", "\(minutes / 60) h \(minutes % 60) min")
     }
 
     /// The rules that are always true.
