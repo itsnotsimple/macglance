@@ -46,6 +46,8 @@ struct DiskView: View {
                 Section { summary(disk) }
             }
 
+            CacheSection()
+
             if let ssd = model.ssd {
                 Section {
                     Label {
@@ -153,5 +155,77 @@ private struct Meter: View {
             }
         }
         .frame(height: 8)
+    }
+}
+
+// MARK: - App caches
+
+/// Scan → a list of apps' caches with sizes and ticks → clear the ticked ones (after a confirmation).
+private struct CacheSection: View {
+    @ObservedObject private var cleaner = CacheCleaner.shared
+    @ObservedObject private var settings = Settings.shared
+    @State private var confirming = false   // (@State compiles fine since Xcode is installed)
+
+    var body: some View {
+        Section {
+            HStack {
+                Button(cleaner.scanned ? tr("Сканирай пак", "Scan again") : tr("Сканирай", "Scan")) { cleaner.scan() }
+                    .disabled(cleaner.state != .idle)
+                if cleaner.state == .scanning {
+                    ProgressView().controlSize(.small)
+                    Text(tr("Сканиране…", "Scanning…")).foregroundStyle(.secondary)
+                } else if cleaner.state == .cleaning {
+                    ProgressView().controlSize(.small)
+                    Text(tr("Изчистване…", "Clearing…")).foregroundStyle(.secondary)
+                } else if let freed = cleaner.lastFreed {
+                    Text(tr("Освободени ", "Freed ") + bytesText(Double(freed))).foregroundStyle(.secondary)
+                }
+                Spacer()
+                if cleaner.scanned, !cleaner.entries.isEmpty {
+                    Button(tr("Изчисти избраното", "Clear selected") + " (" + bytesText(Double(cleaner.selectedBytes)) + ")") {
+                        confirming = true
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(cleaner.selectedBytes == 0 || cleaner.state != .idle)
+                }
+            }
+            if cleaner.scanned && cleaner.entries.isEmpty && cleaner.state == .idle {
+                Text(tr("Няма кеш на приложения за изчистване.", "No app caches to clear.")).foregroundStyle(.secondary)
+            }
+            ForEach(cleaner.entries) { entry in
+                HStack(spacing: 10) {
+                    Toggle("", isOn: Binding(
+                        get: { cleaner.selected.contains(entry.id) && !entry.isRunning },
+                        set: { on in if on { cleaner.selected.insert(entry.id) } else { cleaner.selected.remove(entry.id) } }
+                    ))
+                    .labelsHidden()
+                    .toggleStyle(.checkbox)
+                    .disabled(entry.isRunning)
+                    Image(nsImage: entry.icon).resizable().frame(width: 22, height: 22)
+                    Text(entry.name).lineLimit(1)
+                    if entry.isRunning {
+                        Text(tr("отворено: затвори го, за да изчистиш", "open: quit it to clear"))
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Text(bytesText(Double(entry.bytes))).monospacedDigit().foregroundStyle(.secondary)
+                }
+                .opacity(entry.isRunning ? 0.55 : 1)
+            }
+        } header: {
+            Text(tr("Кеш на приложенията", "App caches"))
+        } footer: {
+            Text(tr("Само кеш на инсталирани приложения: те си го създават наново сами, така че нищо лично не се губи. Кешът на macOS, на програмистки инструменти и на отворени приложения не се пипа. Първото отваряне след това може да е малко по-бавно.",
+                    "Only caches of installed apps: they rebuild them by themselves, so nothing personal is lost. macOS's own caches, developer tools and open apps are left alone. The first launch afterwards can be a little slower."))
+                .font(.callout)
+                .foregroundStyle(.secondary)
+        }
+        .confirmationDialog(tr("Да изчистя кеша на избраните приложения?", "Clear the cache of the selected apps?"),
+                            isPresented: $confirming) {
+            Button(tr("Изчисти ", "Clear ") + bytesText(Double(cleaner.selectedBytes)), role: .destructive) { cleaner.clean() }
+            Button(tr("Отказ", "Cancel"), role: .cancel) {}
+        } message: {
+            Text(tr("Приложенията ще си го създадат наново, когато ги отвориш.", "The apps will rebuild it the next time you open them."))
+        }
     }
 }
