@@ -42,7 +42,7 @@ final class CacheCleaner: ObservableObject {
     func scan() {
         guard state != .scanning, state != .cleaning else { return }
         state = .scanning
-        DispatchQueue.global(qos: .utility).async {
+        DispatchQueue.global(qos: .background).async {   // lowest priority: E-cores, no heat
             let found = self.findAppCaches()
             DispatchQueue.main.async {
                 self.entries = found
@@ -97,16 +97,15 @@ final class CacheCleaner: ObservableObject {
         let chosen = entries.filter { selected.contains($0.id) }
         guard !chosen.isEmpty, state == .idle else { return }
         state = .cleaning
-        DispatchQueue.global(qos: .utility).async {
+        DispatchQueue.global(qos: .background).async {   // lowest priority: E-cores, no heat
             var freed: Int64 = 0
             for entry in chosen where !Self.isRunning(entry.bundleID) {   // it may have been opened since the scan
                 let folder = self.caches.appendingPathComponent(entry.id, isDirectory: true)
                 guard Self.isInsideCaches(folder, self.caches) else { continue }
-                let before = Self.size(of: folder)
                 for item in (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? [] {
                     try? FileManager.default.removeItem(at: item)   // files in use or protected stay; that's fine
                 }
-                freed += max(0, before - Self.size(of: folder))
+                freed += max(0, entry.bytes - Self.size(of: folder))   // the size from the scan, so it's measured once
             }
             DispatchQueue.main.async {
                 self.lastFreed = freed

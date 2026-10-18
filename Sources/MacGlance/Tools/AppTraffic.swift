@@ -22,6 +22,10 @@ final class AppTraffic: ObservableObject {
     @Published private(set) var onMobileData = false
     private var days: [String: [String: Usage]] = [:]          // "2026-10-20" → apps
     private var nettop: Process?
+    private var keepOpen: Pipe?                 // nettop's input: must stay open, see start()
+    private var watchdog: Timer?
+    private var lastCPU: Double?                // seconds of CPU nettop had used at the last check
+    private var disabled = false                // the watchdog stopped it for good
     private var buffer = ""
     private var block: [(pid: pid_t, name: String, down: Double, up: Double)] = []
     private var blocksSeen = 0
@@ -56,7 +60,7 @@ final class AppTraffic: ObservableObject {
     // MARK: - The background nettop
 
     func start() {
-        guard nettop == nil else { return }
+        guard nettop == nil, !disabled else { return }
         let process = Process()
         // `script` gives nettop a terminal, so it prints each line right away instead of holding
         // ~4 KB (several minutes) in a buffer as it does when writing to a pipe.
@@ -67,7 +71,11 @@ final class AppTraffic: ObservableObject {
         let pipe = Pipe()
         process.standardOutput = pipe
         process.standardError = FileHandle.nullDevice
-        process.standardInput = FileHandle.nullDevice   // script needs some input; without it nothing comes out
+        // Its input must be a pipe that stays open. With /dev/null (or a closed input) `script` passes
+        // an end-of-input to nettop, which then spins at 100%+ CPU trying to read its terminal.
+        let input = Pipe()
+        process.standardInput = input
+        keepOpen = input
         pipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
             let data = handle.availableData
             guard !data.isEmpty else { handle.readabilityHandler = nil; return }   // nettop ended
@@ -76,12 +84,16 @@ final class AppTraffic: ObservableObject {
         process.terminationHandler = { [weak self] _ in
             DispatchQueue.main.asyncAfter(deadline: .now() + 60) {   // it died: try again in a minute
                 self?.nettop = nil
+                self?.keepOpen = nil
                 self?.start()
             }
         }
         do {
             try process.run()
             nettop = process
+            lastCPU = nil
+            watchdog?.invalidate()
+            watchdog = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in self?.checkCPU() }
         } catch {
             NSLog("MacGlance: nettop didn't start: \(error)")
         }
@@ -89,10 +101,31 @@ final class AppTraffic: ObservableObject {
 
     /// When MacGlance quits. (If MacGlance crashes, nettop gets a broken pipe on its next print and exits.)
     func stop() {
+        watchdog?.invalidate()
+        watchdog = nil
         nettop?.terminationHandler = nil
         nettop?.terminate()
         nettop = nil
+        keepOpen = nil
         save()
+    }
+
+    /// The safety net: MacGlance must stay light. If nettop (and the `script` around it) used more than
+    /// 5 s of CPU in the last minute, something is wrong: stop it for good and log why.
+    private func checkCPU() {
+        guard let wrapper = nettop?.processIdentifier else { return }
+        var children = [pid_t](repeating: 0, count: 8)
+        let count = Int(proc_listchildpids(wrapper, &children, Int32(children.count * MemoryLayout<pid_t>.size)))
+        let pids = [wrapper] + children.prefix(max(0, count))
+        let ticks = pids.compactMap(Processes.usage).map { Double($0.ri_user_time + $0.ri_system_time) }.reduce(0, +)
+        var timebase = mach_timebase_info_data_t()
+        mach_timebase_info(&timebase)
+        let seconds = ticks * Double(timebase.numer) / Double(timebase.denom) / 1e9
+        defer { lastCPU = seconds }
+        guard let last = lastCPU, seconds - last > 5 else { return }
+        NSLog("MacGlance: nettop used \(Int(seconds - last)) s of CPU in a minute; per-app data is off until the next launch")
+        disabled = true
+        stop()
     }
 
     /// Runs on the pipe's thread. Lines look like "Safari.1234,52311,8812,"; a ",bytes_in,bytes_out,"
