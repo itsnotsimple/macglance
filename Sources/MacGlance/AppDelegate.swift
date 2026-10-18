@@ -57,6 +57,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .showMenu: { [weak self] in self?.statusItem.button?.performClick(nil) },
         ]
 
+        AppTraffic.shared.start()   // per-app network data, counted in the background
+
         _ = cpu.read()   // baseline, the first real value comes on the first tick
         startTimer()
         RAMCleaner.shared.applySchedule()
@@ -70,6 +72,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         MetricStore.shared.save()   // keep the chart history and the energy log for next time
         EnergyLedger.shared.save()
         DailyTraffic.shared.save()
+        AppTraffic.shared.stop()
     }
 
     /// Clicking the app icon while MacGlance is already running.

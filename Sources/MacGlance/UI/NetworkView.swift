@@ -47,17 +47,18 @@ final class NetworkModel: ObservableObject {
 struct NetworkView: View {
     @ObservedObject var model: NetworkModel
     @ObservedObject private var settings = Settings.shared
+    @ObservedObject private var traffic = AppTraffic.shared
 
     var body: some View {
         Form {
             Section { summary }
 
-            if WiFiReader.isPersonalHotspot(model.localIP) {
+            if traffic.onMobileData || WiFiReader.isPersonalHotspot(model.localIP) {
                 Section {
                     Label {
-                        Text(tr("Свързан си към iPhone Personal Hotspot: данните са мобилни. Днес: ",
-                                "You're on an iPhone Personal Hotspot: this is mobile data. Today: ")
-                             + bytesText(DailyTraffic.shared.down + DailyTraffic.shared.up))
+                        Text(tr("Свързан си към мобилна мрежа (iPhone hotspot). Днес на мобилни данни: ",
+                                "You're on a mobile network (iPhone hotspot). Mobile data today: ")
+                             + bytesText(traffic.mobileToday))
                     } icon: {
                         Image(systemName: "personalhotspot").foregroundStyle(.blue)
                     }
@@ -102,6 +103,8 @@ struct NetworkView: View {
                     .foregroundStyle(.secondary)
             }
 
+            appsSection
+
             Section(tr("Днес", "Today")) {
                 row(tr("Свалени", "Downloaded"), bytesText(DailyTraffic.shared.down))
                 row(tr("Качени", "Uploaded"), bytesText(DailyTraffic.shared.up))
@@ -110,6 +113,50 @@ struct NetworkView: View {
         .formStyle(.grouped)
         .onAppear { model.start() }
         .onDisappear { model.stop() }
+    }
+
+    /// Who used the most data today; the part on mobile data is marked with a phone.
+    private var appsSection: some View {
+        Section {
+            let apps = traffic.todaySorted.filter { $0.usage.total >= 100_000 }.prefix(10)
+            if apps.isEmpty {
+                Text(tr("Събира се… (обновява се на 30 секунди)", "Collecting… (updates every 30 seconds)"))
+                    .foregroundStyle(.secondary)
+            }
+            ForEach(Array(apps), id: \.key) { entry in
+                HStack(spacing: 10) {
+                    appIcon(entry.key)
+                    Text(entry.usage.name).lineLimit(1)
+                    Spacer()
+                    if entry.usage.mobile >= 100_000 {
+                        Label(bytesText(entry.usage.mobile), systemImage: "iphone")
+                            .font(.callout)
+                            .foregroundStyle(.orange)
+                            .help(tr("От това на мобилни данни", "Of this, on mobile data"))
+                    }
+                    Text("↓ " + bytesText(entry.usage.down) + "   ↑ " + bytesText(entry.usage.up))
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                        .frame(minWidth: 150, alignment: .trailing)
+                }
+            }
+        } header: {
+            Text(tr("Кой харчи данни днес", "Who used data today"))
+        } footer: {
+            Text(tr("Броят се всички процеси, включително системните (DNS, iCloud). С телефон е отбелязано колко е било на мобилни данни.",
+                    "Every process counts, system ones too (DNS, iCloud). The phone marks how much of it was on mobile data."))
+                .font(.callout)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    @ViewBuilder
+    private func appIcon(_ key: String) -> some View {
+        if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: key) {
+            Image(nsImage: NSWorkspace.shared.icon(forFile: url.path)).resizable().frame(width: 22, height: 22)
+        } else {
+            Image(systemName: "gearshape.2").foregroundStyle(.secondary).frame(width: 22, height: 22)   // a background process
+        }
     }
 
     /// Steps of 100 KB/s, 1, 5, 10, 25, 50, 100 MB/s… so the chart rarely rescales.
