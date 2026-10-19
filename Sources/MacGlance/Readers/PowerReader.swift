@@ -32,14 +32,16 @@ final class PowerReader {
     private let smcReady = smc_open()
     private var battery: io_registry_entry_t = 0   // looked up once, then reused
 
-    func read() -> PowerUsage? {
+    /// `detailed: false` reads only the whole system, the charger and the GPU (3 SMC calls instead of 6
+    /// plus the battery): enough for the menu bar, the charts and the electricity log. CPU watts are 0 then.
+    func read(detailed: Bool = true) -> PowerUsage? {
         guard smcReady, let system = smc(Key.system) else { return nil }
         return PowerUsage(system: system,
-                          pCores: (smc(Key.pCores) ?? 0) + (smc(Key.pCoresCache) ?? 0),
-                          eCores: smc(Key.eCores) ?? 0,
+                          pCores: detailed ? (smc(Key.pCores) ?? 0) + (smc(Key.pCoresCache) ?? 0) : 0,
+                          eCores: detailed ? smc(Key.eCores) ?? 0 : 0,
                           gpu: smc(Key.gpu) ?? 0,
                           adapter: smc(Key.adapter) ?? 0,
-                          battery: batteryWatts())
+                          battery: detailed ? batteryWatts() : nil)
     }
 
     private var checkedKeys: Set<String> = []   // keys whose type was already confirmed as float

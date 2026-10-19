@@ -201,7 +201,7 @@ private struct CacheSection: View {
                     .labelsHidden()
                     .toggleStyle(.checkbox)
                     .disabled(entry.isRunning)
-                    Image(nsImage: entry.icon).resizable().frame(width: 22, height: 22)
+                    AppIconView(image: AppIcons.small(bundleID: entry.bundleID))
                     Text(entry.name).lineLimit(1)
                     if entry.isRunning {
                         Text(tr("отворено: затвори го, за да изчистиш", "open: quit it to clear"))

@@ -150,13 +150,8 @@ struct NetworkView: View {
         }
     }
 
-    @ViewBuilder
     private func appIcon(_ key: String) -> some View {
-        if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: key) {
-            Image(nsImage: NSWorkspace.shared.icon(forFile: url.path)).resizable().frame(width: 22, height: 22)
-        } else {
-            Image(systemName: "gearshape.2").foregroundStyle(.secondary).frame(width: 22, height: 22)   // a background process
-        }
+        AppIconView(image: AppIcons.small(bundleID: key))
     }
 
     /// Steps of 100 KB/s, 1, 5, 10, 25, 50, 100 MB/s… so the chart rarely rescales.

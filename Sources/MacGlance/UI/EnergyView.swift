@@ -10,7 +10,6 @@ final class EnergyModel: ObservableObject {
     @Published private(set) var recentDays: [(date: Date, day: EnergyLedger.Day?)] = []   // last 14, oldest first
     private let powerReader = PowerReader()
     private var timer: Timer?
-    private var icons: [String: NSImage] = [:]
 
     /// The price as typed. Only digits and one decimal point (or comma) get through.
     @Published var priceText: String = {
@@ -38,14 +37,6 @@ final class EnergyModel: ObservableObject {
         return String(result.prefix(8))
     }
 
-    /// The app's icon by its bundle id, even if it isn't running right now. Looked up once.
-    func icon(for key: String) -> NSImage? {
-        if let cached = icons[key] { return cached }
-        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: key) else { return nil }
-        let image = NSWorkspace.shared.icon(forFile: url.path)
-        icons[key] = image
-        return image
-    }
 
     func start() {
         refresh()   // baseline
@@ -265,15 +256,8 @@ extension EnergyView {
             .frame(width: 124, alignment: .trailing)
     }
 
-    @ViewBuilder
     private func appIcon(_ key: String) -> some View {
-        if let icon = model.icon(for: key) {
-            Image(nsImage: icon).resizable().frame(width: 22, height: 22)
-        } else {
-            Image(systemName: "gearshape.2")   // background process, no app icon
-                .foregroundStyle(.secondary)
-                .frame(width: 22, height: 22)
-        }
+        AppIconView(image: AppIcons.small(bundleID: key))
     }
 
     private func billTile(_ label: String, _ wattHours: Double) -> some View {

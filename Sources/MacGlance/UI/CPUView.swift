@@ -32,10 +32,14 @@ final class CPUModel: ObservableObject {
         timer = nil
     }
 
-    func refresh() {
+    private var refreshes = 0
+
+    func refresh(force: Bool = false) {
+        refreshes += 1
         load = cpu.read() ?? load
         power = powerReader.read()
-        processes = processReader.top(8)
+        // The process list (a scan of every process) every other refresh: still current, half the cost.
+        if force || refreshes <= 2 || refreshes % 2 == 0 { processes = processReader.top(8) }
         temperatures = temperatureReader.read(cpuOnly: true)   // the 18 CPU sensors, ~1.7 ms
         if let measured = thermal.read().frequencies { speeds = measured }   // keep the last while a new baseline is taken
     }
@@ -63,7 +67,7 @@ final class CPUModel: ObservableObject {
     /// Asks the app to quit, like ⌘Q: it may still ask to save your work.
     func quit(_ app: NSRunningApplication) {
         app.terminate()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.refresh() }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.refresh(force: true) }
     }
 
     /// Average load of one kind of core, nil if the Mac doesn't say which core is which.
@@ -94,15 +98,18 @@ struct CPUView: View {
                 if model.processes.isEmpty {
                     Text(tr("Измерване…", "Measuring…")).foregroundStyle(.secondary)
                 }
-                ForEach(model.processes) { process in
-                    HStack(spacing: 10) {
-                        icon(process)
-                        Text(process.name)
-                        Spacer()
-                        Text(String(format: "%.1f%%", process.percent))
-                            .monospacedDigit()
-                            .foregroundStyle(.secondary)
-                        QuitSlot(app: process.app, canQuit: process.canQuit, quit: model.quit)
+                VStack(spacing: 0) {   // one Form cell for the whole list: far cheaper to refresh than a cell per row
+                    ForEach(Array(model.processes.enumerated()), id: \.element.id) { index, process in
+                        if index > 0 { Divider().padding(.vertical, 6) }
+                        HStack(spacing: 10) {
+                            icon(process)
+                            Text(process.name)
+                            Spacer()
+                            Text(String(format: "%.1f%%", process.percent))
+                                .monospacedDigit()
+                                .foregroundStyle(.secondary)
+                            QuitSlot(app: process.app, canQuit: process.canQuit, quit: model.quit)
+                        }
                     }
                 }
             } header: {
@@ -156,15 +163,8 @@ struct CPUView: View {
         .fixedSize()
     }
 
-    @ViewBuilder
     private func icon(_ process: ProcessCPU) -> some View {
-        if let icon = process.app?.icon {
-            Image(nsImage: icon).resizable().frame(width: 22, height: 22)
-        } else {
-            Image(systemName: "gearshape.2")   // background process, no app icon
-                .foregroundStyle(.secondary)
-                .frame(width: 22, height: 22)
-        }
+        AppIconView(image: AppIcons.small(app: process.app))
     }
 }
 

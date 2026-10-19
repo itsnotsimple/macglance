@@ -12,7 +12,8 @@ final class WidgetPublisher {
     private var wroteOnce = false   // one write at launch, so the widget gallery shows real numbers
     private var lastUsageCheck = Date.distantPast
     private var lastWrite = Date.distantPast
-    private var lastReload = Date.distantPast
+    private var reloadedLanguage: String?   // the language the widgets were last asked to redraw in
+    private let powerReader = PowerReader()   // a detailed read once a minute; the menu bar's tick reads less
     private let memoryReader = MemoryReader()
     private let temperatures = TemperatureReader()
     private let batteryReader = BatteryReader()
@@ -34,9 +35,13 @@ final class WidgetPublisher {
         guard (inUse && now.timeIntervalSince(lastWrite) >= 60) || (!wroteOnce && cpu != nil && network != nil) else { return }
         wroteOnce = true
         lastWrite = now
-        WidgetShared.save(snapshot(cpu: cpu, gpu: gpu, memory: memory ?? memoryReader.read(), power: power, network: network))
-        if now.timeIntervalSince(lastReload) >= 180 {
-            lastReload = now
+        WidgetShared.save(snapshot(cpu: cpu, gpu: gpu, memory: memory ?? memoryReader.read(),
+                                   power: powerReader.read() ?? power, network: network))
+        // macOS refreshes the widgets on its own schedule (they ask every 5 min). Waking them up ourselves
+        // only when it matters (first data, another language) spares the system starting the widget process.
+        let language = Settings.shared.language.rawValue
+        if inUse, reloadedLanguage != language {
+            reloadedLanguage = language
             WidgetCenter.shared.reloadAllTimelines()
         }
     }

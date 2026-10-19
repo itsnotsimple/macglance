@@ -30,7 +30,7 @@ final class GPUModel: ObservableObject {
 
     func refresh() {
         stats = gpu.read()
-        watts = power.read()?.gpu
+        watts = power.read(detailed: false)?.gpu
         temperature = temperatures.gpuTemperature()
         processes = processReader.top(8)
     }
@@ -70,15 +70,18 @@ struct GPUView: View {
                 if model.processes.isEmpty {
                     Text(tr("Измерване…", "Measuring…")).foregroundStyle(.secondary)
                 }
-                ForEach(model.processes) { process in
-                    HStack(spacing: 10) {
-                        icon(process)
-                        Text(process.name)
-                        Spacer()
-                        Text(String(format: "%.1f%%", process.percent))
-                            .monospacedDigit()
-                            .foregroundStyle(.secondary)
-                        QuitSlot(app: process.app, canQuit: process.canQuit, quit: model.quit)
+                VStack(spacing: 0) {   // one Form cell for the whole list: far cheaper to refresh than a cell per row
+                    ForEach(Array(model.processes.enumerated()), id: \.element.id) { index, process in
+                        if index > 0 { Divider().padding(.vertical, 6) }
+                        HStack(spacing: 10) {
+                            icon(process)
+                            Text(process.name)
+                            Spacer()
+                            Text(String(format: "%.1f%%", process.percent))
+                                .monospacedDigit()
+                                .foregroundStyle(.secondary)
+                            QuitSlot(app: process.app, canQuit: process.canQuit, quit: model.quit)
+                        }
                     }
                 }
             } header: {
@@ -130,14 +133,7 @@ struct GPUView: View {
         }
     }
 
-    @ViewBuilder
     private func icon(_ process: ProcessGPU) -> some View {
-        if let icon = process.app?.icon {
-            Image(nsImage: icon).resizable().frame(width: 22, height: 22)
-        } else {
-            Image(systemName: "gearshape.2")   // background process, no app icon
-                .foregroundStyle(.secondary)
-                .frame(width: 22, height: 22)
-        }
+        AppIconView(image: AppIcons.small(app: process.app))
     }
 }

@@ -63,7 +63,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         startTimer()
         RAMCleaner.shared.applySchedule()
 
-        if !LaunchAtLogin.wasLaunchedAtLogin {   // opened by hand (Finder, Spotlight): show the window
+        // Opened by hand (Finder, Spotlight): show the window. Not at login, nor with --menu-bar-only
+        // (open -a MacGlance --args --menu-bar-only).
+        if !LaunchAtLogin.wasLaunchedAtLogin && !CommandLine.arguments.contains("--menu-bar-only") {
             appWindow.show()
         }
     }
@@ -101,7 +103,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Hidden numbers are not read at all, unless the menu is open and needs them.
         let menuOpen = infoMenu.isOpen
         let mem = settings.showRAM || menuOpen ? memory.read() : nil
-        let pwr = power.read()   // always: feeds the watts chart (~1 ms)
+        let pwr = power.read(detailed: menuOpen)   // always: feeds the watts chart; the details only when the menu shows them
         if let pwr {
             store.record(.power, pwr.system)
             EnergyLedger.shared.add(pwr)   // daily kWh for the electricity bill

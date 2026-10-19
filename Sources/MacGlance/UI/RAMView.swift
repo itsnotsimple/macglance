@@ -22,15 +22,19 @@ final class RAMModel: ObservableObject {
         timer = nil
     }
 
-    func refresh() {
+    private var refreshes = 0
+
+    func refresh(force: Bool = false) {
+        refreshes += 1
         usage = memory.read()
-        apps = appMemory.top(8)
+        // Memory per app changes slowly and the scan costs ~7 ms: every third refresh is enough.
+        if force || refreshes == 1 || refreshes % 3 == 0 { apps = appMemory.top(8) }
     }
 
     /// Asks the app to quit, like ⌘Q: it may still ask to save your work.
     func quit(_ app: NSRunningApplication) {
         app.terminate()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.refresh() }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in self?.refresh(force: true) }
     }
 }
 
@@ -87,9 +91,7 @@ struct RAMView: View {
             Section(tr("Кой държи най-много", "Using the most")) {
                 ForEach(model.apps) { item in
                     HStack(spacing: 10) {
-                        Image(nsImage: item.app.icon ?? NSImage())
-                            .resizable()
-                            .frame(width: 22, height: 22)
+                        AppIconView(image: AppIcons.small(app: item.app))
                         Text(item.app.localizedName ?? "?")
                         Spacer()
                         Text(memoryText(item.bytes))
@@ -104,7 +106,7 @@ struct RAMView: View {
         .onAppear { model.start() }
         .onDisappear { model.stop() }
         .onChange(of: cleaner.isRunning) { _, running in
-            if !running { model.refresh() }   // show the result right away
+            if !running { model.refresh(force: true) }   // show the result right away
         }
     }
 
