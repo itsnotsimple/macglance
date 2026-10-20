@@ -154,6 +154,7 @@ enum SleepLog {
         let names: [(String, String, String)] = [
             ("intelligenceflow", "Apple Intelligence", "Apple Intelligence"),
             ("GenerativeFunctions", "Apple Intelligence", "Apple Intelligence"),
+            ("imageplaygroundd", "Image Playground (Apple Intelligence)", "Image Playground (Apple Intelligence)"),
             ("calaccessd", "Календар", "Calendar"),
             ("DHCP", "Мрежа (DHCP)", "Network (DHCP)"),
             ("ScreenTimeAgent", "Screen Time", "Screen Time"),

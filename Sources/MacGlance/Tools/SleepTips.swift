@@ -22,12 +22,20 @@ enum SleepTips {
         }
         var tips: [SleepTip] = []
 
-        let intelligence = count("intelligenceflow", "GenerativeFunctions")
+        let intelligence = count("intelligenceflow", "GenerativeFunctions", "imageplaygroundd")
         if intelligence >= 20 {
-            tips.append(.init(kind: .info, text: tr(
-                "Apple Intelligence е будило Мака \(intelligence) пъти тази седмица, за да обновява моделите си. Ако не го ползваш, можеш да го изключиш от Apple Intelligence & Siri.",
-                "Apple Intelligence woke the Mac \(intelligence) times this week to update its models. If you don't use it, you can turn it off in Apple Intelligence & Siri."),
-                settings: "com.apple.Siri-Settings.extension"))
+            if appleIntelligenceOn == false {
+                // Turned off, and they still run: say so, so nobody hunts for a switch that isn't there.
+                tips.append(.init(kind: .info, text: tr(
+                    "Задачи на Apple Intelligence са будили Мака \(intelligence) пъти тази седмица, въпреки че при теб то е изключено: macOS пак проверява моделите и списъка с действия на Siri. За това няма копче, а всяко събуждане е за секунди. Няма какво да правиш.",
+                    "Apple Intelligence tasks woke the Mac \(intelligence) times this week, even though you have it turned off: macOS still checks its models and Siri's list of app actions. There's no switch for that, and each wake lasts seconds. Nothing to do."),
+                    settings: nil))
+            } else {
+                tips.append(.init(kind: .info, text: tr(
+                    "Apple Intelligence е будило Мака \(intelligence) пъти тази седмица, за да обновява моделите си и списъка с действия на Siri. Ако не го ползваш, можеш да го изключиш в настройките на Siri.",
+                    "Apple Intelligence woke the Mac \(intelligence) times this week to update its models and Siri's list of app actions. If you don't use it, you can turn it off in Siri's settings."),
+                    settings: "com.apple.Siri-Settings.extension"))
+            }
         }
         let screenTime = count("ScreenTimeAgent")
         if screenTime >= 20 {
@@ -65,6 +73,16 @@ enum SleepTips {
                 settings: nil))
         }
         return tips
+    }
+
+    /// Whether Apple Intelligence is turned on: macOS keeps the choice under a number that changes
+    /// between versions (1 = on). nil if there's nothing there (an older macOS, or never asked).
+    static var appleIntelligenceOn: Bool? {
+        let domain = "com.apple.CloudSubscriptionFeatures.optIn" as CFString
+        guard let keys = CFPreferencesCopyKeyList(domain, kCFPreferencesCurrentUser, kCFPreferencesAnyHost) as? [String] else { return nil }
+        let choices = keys.filter { !$0.isEmpty && $0.allSatisfy(\.isNumber) }
+            .compactMap { CFPreferencesCopyAppValue($0 as CFString, domain) as? Bool }
+        return choices.isEmpty ? nil : choices.contains(true)
     }
 
     static func openSettings(_ pane: String) {
