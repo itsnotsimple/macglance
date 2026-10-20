@@ -55,7 +55,7 @@
   <img src="docs/widgets.png" width="720" alt="MacGlance widgets: the overview and CPU (medium), RAM, power, temperature and battery (small)">
 </p>
 
-Charts go back 3 minutes, 1 or 2 hours, 24 hours or 7 days, and their history survives restarts. Optional notifications tell you when an app is stuck at 100% CPU, memory runs short, the charger can't keep up, the battery gets hot, or the chip is slowed down by heat.
+Charts go back 3 minutes, 1 or 2 hours, 24 hours or 7 days, and their history survives restarts and updates. Hover a point to see which apps used the most at that moment: who loaded the CPU or GPU, drew the watts, heated the chip or used the network. Optional notifications tell you when an app is stuck at 100% CPU, memory runs short, the charger can't keep up, the battery gets hot, or the chip is slowed down by heat.
 
 ## Install
 
