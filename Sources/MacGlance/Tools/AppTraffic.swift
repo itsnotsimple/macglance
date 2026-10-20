@@ -139,7 +139,7 @@ final class AppTraffic: ObservableObject {
                 let finished = block
                 block = []
                 blocksSeen += 1
-                if blocksSeen > 2, !finished.isEmpty {   // block 1 = totals; from block 2 on, changes
+                if blocksSeen > 2 {   // block 1 = totals; from block 2 on, changes (empty ones too: quiet time counts)
                     DispatchQueue.main.async { self.add(finished) }
                 }
                 continue
@@ -157,13 +157,12 @@ final class AppTraffic: ObservableObject {
         if days[day] == nil { today = [:] }   // a new day
         var apps = days[day] ?? [:]
         let mobile = onMobileData
+        var block: [String: (name: String, down: Double, up: Double)] = [:]   // this print, per app: for the charts
         for change in changes {
-            let owner = Processes.owner(of: change.pid)
-            let app = NSRunningApplication(processIdentifier: owner)
-            let processName = Processes.name(owner)
-            let name = app?.localizedName ?? (processName.isEmpty ? change.name : processName)   // ended already: nettop's name
-            let key = app?.bundleIdentifier ?? name
+            let (key, name) = ProcessNames.identify(owner: Processes.owner(of: change.pid), fallback: change.name)   // ended already: nettop's name
             guard !key.isEmpty else { continue }
+            block[key, default: (name, 0, 0)].down += change.down
+            block[key, default: (name, 0, 0)].up += change.up
             var usage = apps[key] ?? Usage(name: name)
             usage.down += change.down
             usage.up += change.up
@@ -175,6 +174,9 @@ final class AppTraffic: ObservableObject {
         }
         days[day] = apps
         today = apps
+        // Who downloaded and uploaded, for the Network charts. Under 1 KB/s isn't worth keeping.
+        AppHistory.shared.record(.down, at: Date(), duration: 30, block.filter { $0.value.down >= 30_000 }.map { ($0.key, $0.value.name, $0.value.down) })
+        AppHistory.shared.record(.up, at: Date(), duration: 30, block.filter { $0.value.up >= 30_000 }.map { ($0.key, $0.value.name, $0.value.up) })
         if Date().timeIntervalSince(lastSave) > 600 { save() }
     }
 

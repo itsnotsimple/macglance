@@ -1,9 +1,8 @@
-import AppKit
-import CSensors
+import Foundation
 
 /// Who writes to the SSD, per app, per day. The kernel counts the bytes every process has written
-/// to disk (ri_diskio_byteswritten); once a minute MacGlance reads them all (~4 ms) and adds what's
-/// new to today. Processes of macOS's root user (swap, part of Spotlight, Time Machine) can't be
+/// to disk (ri_diskio_byteswritten); once a minute MacGlance reads them all (MinuteSampler) and adds
+/// what's new to today. Processes of macOS's root user (swap, part of Spotlight, Time Machine) can't be
 /// read without admin rights, so they're missing here; the SSD's own "written today" has them.
 final class DiskWriters: ObservableObject {
     static let shared = DiskWriters()
@@ -27,9 +26,7 @@ final class DiskWriters: ObservableObject {
     private var ssdAtStart: [String: Double] = [:]              // day → the SSD's own lifetime counter at its first look
     private var ssdNow: Double?
     private var lastSample: Date?
-    private var timer: Timer?
     private var lastSave = Date()
-    private let queue = DispatchQueue(label: "macglance.diskwriters", qos: .utility)
     private let file: URL = {
         let folder = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("MacGlance", isDirectory: true)
@@ -57,61 +54,31 @@ final class DiskWriters: ObservableObject {
         today = days[EnergyLedger.key(Date())] ?? [:]
     }
 
-    func start() {
-        guard timer == nil else { return }
-        sample()
-        let timer = Timer(timeInterval: 60, repeats: true) { [weak self] _ in self?.sample() }
-        timer.tolerance = 10   // lets macOS run it together with other wake-ups
-        RunLoop.main.add(timer, forMode: .common)
-        self.timer = timer
-    }
-
-    func stop() {
-        timer?.invalidate()
-        timer = nil
-        save()
-    }
-
     // MARK: - Counting
 
-    /// Reads every process in the background, then names the owners on the main thread.
-    private func sample() {
-        let seen = self.seen, previous = lastSample, now = Date()
-        queue.async { [weak self] in
-            var current: [String: Double] = [:]
-            var added: [pid_t: (bytes: Double, name: String)] = [:]   // per owner
-            for pid in Processes.all() {
-                guard let usage = Processes.usage(pid) else { continue }   // root processes need admin rights
-                let written = Double(usage.ri_diskio_byteswritten)
-                let key = "\(pid)-\(usage.ri_proc_start_abstime)"
-                current[key] = written
-                // New since the last look: all it wrote counts. Already running at the very first look
-                // (a fresh install): only what comes next, so the list starts together with the SSD's count.
-                let before = seen[key] ?? (previous.map { (Processes.started(pid) ?? .distantPast) >= $0 } == true ? 0 : written)
-                guard written > before else { continue }
-                let owner = Processes.owner(of: pid)
-                added[owner, default: (0, Processes.name(pid))].bytes += written - before
-            }
-            var smart = SSDSmart()
-            let ssd = ssd_smart(&smart) ? smart.bytesWritten : nil   // 0.4 ms
-            DispatchQueue.main.async { self?.add(added, seen: current, ssd: ssd, at: now) }
+    func take(_ snapshot: MinuteSampler.Snapshot) {
+        var current: [String: Double] = [:]
+        var added: [pid_t: (bytes: Double, name: String)] = [:]   // per owner
+        for process in snapshot.processes {
+            current[process.key] = process.written
+            // New since the last look: all it wrote counts. Already running at the very first look
+            // (a fresh install): only what comes next, so the list starts together with the SSD's count.
+            let before = seen[process.key]
+                ?? (lastSample.map { (Processes.started(process.pid) ?? .distantPast) >= $0 } == true ? 0 : process.written)
+            guard process.written > before else { continue }
+            added[Processes.owner(of: process.pid), default: (0, Processes.name(process.pid))].bytes += process.written - before
         }
-    }
-
-    private func add(_ added: [pid_t: (bytes: Double, name: String)], seen current: [String: Double], ssd: Double?, at time: Date) {
         seen = current
-        lastSample = time
+        lastSample = snapshot.time
+
         let day = EnergyLedger.key(Date())
-        if let ssd {   // nil if another app was reading it that very moment
+        if let ssd = snapshot.ssdWritten {
             ssdNow = ssd
             if ssdAtStart[day] == nil { ssdAtStart[day] = ssd }
         }
         var apps = days[day] ?? [:]
         for (owner, change) in added {
-            let app = NSRunningApplication(processIdentifier: owner)
-            let ownerName = Processes.name(owner)
-            let name = app?.localizedName ?? (ownerName.isEmpty ? change.name : ownerName)   // the owner ended: the process's own name
-            let key = app?.bundleIdentifier ?? name
+            let (key, name) = ProcessNames.identify(owner: owner, fallback: change.name)   // the owner ended: the process's own name
             guard !key.isEmpty else { continue }
             apps[key, default: Writer(name: name)].bytes += change.bytes
         }
@@ -157,7 +124,7 @@ final class DiskWriters: ObservableObject {
         for key in keys(count) {
             guard let apps = days[key] else { continue }
             for (key, writer) in apps {
-                let label = Self.label(key: key, name: writer.name)
+                let label = ProcessNames.label(key: key, name: writer.name)
                 totals[label.name, default: (label.icon, 0)].bytes += writer.bytes
             }
         }
@@ -165,37 +132,5 @@ final class DiskWriters: ObservableObject {
             .sorted { $0.value.bytes > $1.value.bytes }
             .prefix(limit)
             .map { Row(id: $0.key, icon: $0.value.icon, bytes: $0.value.bytes) }
-    }
-
-    /// macOS's background processes in words, with the icon of the app they work for;
-    /// apps and anything unknown keep their own name.
-    private static func label(key: String, name: String) -> (name: String, icon: String?) {
-        let known: [([String], String, String, String?)] = [
-            (["IMDPersistenceAgent", "imagent"], "Съобщения", "Messages", "com.apple.MobileSMS"),
-            (["identityservicesd"], "iMessage и FaceTime", "iMessage and FaceTime", "com.apple.FaceTime"),
-            (["corespotlightd", "spotlightknowledge", "mdworker", "mdbulkimport", "parsecd"],
-             "Spotlight (индекс за търсене)", "Spotlight (search index)", "com.apple.Spotlight"),
-            (["appstoreagent", "storedownloadd", "storeassetd", "appstorecomponentsd"], "App Store", "App Store", "com.apple.AppStore"),
-            (["photolibraryd", "photoanalysisd", "mediaanalysisd", "cloudphotod"], "Снимки", "Photos", "com.apple.Photos"),
-            (["com.apple.Safari.SafeBrowsing"], "Safari (Safe Browsing)", "Safari (Safe Browsing)", "com.apple.Safari"),
-            (["AMPLibraryAgent", "AMPArtworkAgent"], "Музика", "Music", "com.apple.Music"),
-            (["calaccessd"], "Календар", "Calendar", "com.apple.iCal"),
-            (["contactsd", "AddressBookSourceSync"], "Контакти", "Contacts", "com.apple.AddressBook"),
-            (["remindd"], "Напомняния", "Reminders", "com.apple.reminders"),
-            (["cloudd", "bird", "fileproviderd"], "iCloud", "iCloud", nil),
-            (["chronod"], "Уиджети", "Widgets", nil),
-            (["duetexpertd", "suggestd"], "Предложения на Siri", "Siri Suggestions", nil),
-            (["knowledge-agent", "BiomeAgent", "biomesyncd"], "История на ползването (Screen Time, Siri)", "Usage history (Screen Time, Siri)", nil),
-            (["intelligenceplatformd", "intelligenceflowd", "generativeexperiencesd"], "Apple Intelligence", "Apple Intelligence", nil),
-            (["lsd"], "Списък с приложенията на macOS (lsd)", "macOS's list of apps (lsd)", nil),
-            (["cfprefsd"], "Настройки на приложенията (cfprefsd)", "App settings (cfprefsd)", nil),
-            (["nsurlsessiond"], "Изтегляния на заден план", "Background downloads", nil),
-        ]
-        let candidates = [key, name, key.components(separatedBy: ".").last ?? key]
-        for (needles, bg, en, icon) in known
-        where needles.contains(where: { needle in candidates.contains { $0 == needle || ($0.hasPrefix(needle) && needle.count > 4) } }) {
-            return (tr(bg, en), icon)
-        }
-        return (name, key.contains(".") ? key : nil)   // an app: its bundle id gives the icon
     }
 }

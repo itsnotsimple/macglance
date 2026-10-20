@@ -25,7 +25,7 @@ struct HistoryPanel: View {
         let samples = MetricStore.shared.samples(metric, in: settings.chartRange)
         Section {
             HistoryChart(samples: samples, range: settings.chartRange, maxValue: maxValue?(samples) ?? 100,
-                         format: format, hoverIndex: $hoverIndex)
+                         format: format, apps: metric.appHistoryKind, hoverIndex: $hoverIndex)
                 .frame(height: 150)
                 .padding(.vertical, 4)
         } header: {
@@ -47,12 +47,13 @@ struct HistoryPanel: View {
 
 /// One value over time: a line with a light wash under it, newest on the right edge ("now").
 /// The scale is fixed per chart so it doesn't jump. Gaps (Mac asleep, app closed) break the line.
-/// Hover shows the exact value and when it was.
+/// Hover shows the exact value, when it was, and which apps used the most then.
 struct HistoryChart: View {
     let samples: [Sample]
     let range: TimeRange
     let maxValue: Double
     let format: (Double) -> String
+    let apps: AppHistory.Kind?
     @Binding var hoverIndex: Int?
 
     private let axisWidth: CGFloat = 40
@@ -87,8 +88,11 @@ struct HistoryChart: View {
                         .position(x: plot.midX, y: plot.midY)
                 }
                 if let index = hoverIndex, samples.indices.contains(index) {
-                    tooltip(index, now: now)
-                        .position(x: min(max(x(samples[index].time, plot, now), plot.minX + 70), plot.maxX - 70), y: 10)
+                    let who = whoUsed(index)
+                    let halfWidth: CGFloat = who.isEmpty ? 70 : 150
+                    tooltip(index, who: who, now: now)
+                        .position(x: min(max(x(samples[index].time, plot, now), plot.minX + halfWidth), plot.maxX - halfWidth),
+                                  y: who.isEmpty ? 10 : 14)
                 }
             }
             .contentShape(Rectangle())
@@ -166,8 +170,9 @@ struct HistoryChart: View {
         context.fill(Path(ellipseIn: ring.insetBy(dx: 2, dy: 2)), with: .color(.blue))
     }
 
-    /// "37% · преди 12 s" for short periods, "37% · 14:32" (or "Mon 14:32" over 7 days) for long ones.
-    private func tooltip(_ index: Int, now: TimeInterval) -> some View {
+    /// "37% · преди 12 s" for short periods, "37% · 14:32" (or "Mon 14:32" over 7 days) for long ones,
+    /// with who used the most under it.
+    private func tooltip(_ index: Int, who: String, now: TimeInterval) -> some View {
         let sample = samples[index]
         let secondsAgo = Int(now - sample.time)
         let when: String
@@ -179,11 +184,45 @@ struct HistoryChart: View {
             formatter.dateFormat = range == .days7 ? "EEE HH:mm" : "HH:mm"
             when = formatter.string(from: Date(timeIntervalSince1970: sample.time))
         }
-        return Text(format(sample.value) + " · " + when)
-            .font(.caption)
-            .monospacedDigit()
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
-            .background(.regularMaterial, in: Capsule())
+        return VStack(spacing: 1) {
+            Text(format(sample.value) + " · " + when)
+                .font(.caption)
+            if !who.isEmpty {
+                Text(who)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .monospacedDigit()
+        .lineLimit(1)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 3)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: who.isEmpty ? 10 : 8))
+    }
+
+    /// "Safari 30% · Code 8%": the apps that used the most around this point (the stretch halfway to its
+    /// neighbours, at least a minute). Not on the 3-minute chart: apps are kept per minute.
+    private func whoUsed(_ index: Int) -> String {
+        guard let apps, range != .minutes3 else { return "" }
+        let time = samples[index].time
+        let before = index > 0 ? (samples[index - 1].time + time) / 2 : time
+        let after = index + 1 < samples.count ? (time + samples[index + 1].time) / 2 : time
+        return AppHistory.shared.top(apps, from: min(before, time - 30), to: max(after, time + 30))
+            .compactMap { app -> String? in
+                let value: String
+                switch apps {
+                case .cpu, .gpu:
+                    guard app.value >= 0.5 else { return nil }
+                    value = String(format: "%.0f%%", app.value)
+                case .power:
+                    guard app.value >= 0.05 else { return nil }
+                    value = watts(app.value)
+                case .down, .up:
+                    guard app.value >= 1000 else { return nil }
+                    value = speedText(app.value)
+                }
+                return app.name + " " + value
+            }
+            .joined(separator: " · ")
     }
 }

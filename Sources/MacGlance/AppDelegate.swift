@@ -58,7 +58,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ]
 
         AppTraffic.shared.start()   // per-app network data, counted in the background
-        DiskWriters.shared.start()  // per-app SSD writes, once a minute
+        MinuteSampler.shared.start()   // once a minute: SSD writes per app, who used the CPU, energy and GPU
 
         _ = cpu.read()   // baseline, the first real value comes on the first tick
         startTimer()
@@ -76,7 +76,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         EnergyLedger.shared.save()
         DailyTraffic.shared.save()
         AppTraffic.shared.stop()
-        DiskWriters.shared.stop()
+        MinuteSampler.shared.stop()
+        DiskWriters.shared.save()
+        AppHistory.shared.save()
     }
 
     /// Clicking the app icon while MacGlance is already running.
