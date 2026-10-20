@@ -1,4 +1,4 @@
-import Darwin
+import Foundation
 
 /// Helpers shared by the readers that look at every process (RAM per app, CPU per app).
 enum Processes {
@@ -22,6 +22,14 @@ enum Processes {
     static func owner(of pid: pid_t) -> pid_t {
         let owner = responsiblePID(pid)
         return owner > 0 ? owner : pid
+    }
+
+    /// When a process started, by the clock (rusage's start time stops while the Mac sleeps).
+    static func started(_ pid: pid_t) -> Date? {
+        var info = proc_bsdinfo()
+        let size = Int32(MemoryLayout<proc_bsdinfo>.size)
+        guard proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, size) == size else { return nil }
+        return Date(timeIntervalSince1970: Double(info.pbi_start_tvsec) + Double(info.pbi_start_tvusec) / 1e6)
     }
 
     /// Short process name, e.g. "photoanalysisd".

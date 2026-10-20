@@ -6,12 +6,10 @@
 #include <IOKit/storage/nvme/NVMeSMARTLibExternal.h>
 
 // Apple's own NVMe SMART interface (the SDK header NVMeSMARTLibExternal.h): the same health
-// numbers `smartctl` shows, readable without root. Opened once, then reused.
-static IOCFPlugInInterface **plugin;
-static IONVMeSMARTInterface **smart;
-
-static bool open_smart(void) {
-    if (smart) return true;
+// numbers `smartctl` shows, readable without root. Only one program can have it open at a time,
+// so it's opened for each reading and closed right after (kept open, it locked out smartctl,
+// DriveDx and other apps for as long as MacGlance ran).
+static bool open_smart(IOCFPlugInInterface ***plugin, IONVMeSMARTInterface ***smart) {
     CFMutableDictionaryRef matching = IOServiceMatching("IOService");
     CFMutableDictionaryRef property = CFDictionaryCreateMutable(NULL, 0, &kCFTypeDictionaryKeyCallBacks,
                                                                 &kCFTypeDictionaryValueCallBacks);
@@ -22,17 +20,24 @@ static bool open_smart(void) {
     if (!disk) return false;
     SInt32 score = 0;
     kern_return_t result = IOCreatePlugInInterfaceForService(disk, kIONVMeSMARTUserClientTypeID, kIOCFPlugInInterfaceID,
-                                                             &plugin, &score);
+                                                             plugin, &score);
     IOObjectRelease(disk);
-    if (result != KERN_SUCCESS || !plugin) return false;
-    (*plugin)->QueryInterface(plugin, CFUUIDGetUUIDBytes(kIONVMeSMARTInterfaceID), (LPVOID *)&smart);
-    return smart != NULL;
+    if (result != KERN_SUCCESS || !*plugin) return false;
+    (**plugin)->QueryInterface(*plugin, CFUUIDGetUUIDBytes(kIONVMeSMARTInterfaceID), (LPVOID *)smart);
+    if (*smart) return true;
+    IODestroyPlugInInterface(*plugin);
+    return false;
 }
 
 bool ssd_smart(SSDSmart *out) {
-    if (!open_smart()) return false;
+    IOCFPlugInInterface **plugin = NULL;
+    IONVMeSMARTInterface **smart = NULL;
+    if (!open_smart(&plugin, &smart)) return false;
     NVMeSMARTData data = {0};
-    if ((*smart)->SMARTReadData(smart, &data) != kIOReturnSuccess) return false;
+    IOReturn read = (*smart)->SMARTReadData(smart, &data);
+    (*smart)->Release(smart);
+    IODestroyPlugInInterface(plugin);
+    if (read != kIOReturnSuccess) return false;
     out->percentUsed = data.PERCENTAGE_USED;
     out->availableSpare = data.AVAILABLE_SPARE;
     out->spareThreshold = data.AVAILABLE_SPARE_THRESHOLD;

@@ -31,7 +31,7 @@ final class DiskModel: ObservableObject {
         swap = memory.read()?.swap
         if Date().timeIntervalSince(lastSMART) >= 60 {
             lastSMART = Date()
-            ssd = ssdReader.read()
+            ssd = ssdReader.read() ?? ssd   // a reading can fail if another app reads it that very moment
         }
     }
 }
@@ -89,6 +89,8 @@ struct DiskView: View {
                         .foregroundStyle(.secondary)
                 }
             }
+
+            WritersSection()
         }
         .formStyle(.grouped)
         .onAppear { model.start() }
@@ -155,6 +157,76 @@ private struct Meter: View {
             }
         }
         .frame(height: 8)
+    }
+}
+
+// MARK: - Who writes
+
+/// The apps that wrote the most to the SSD, today or over the last 7 days.
+private struct WritersSection: View {
+    @ObservedObject private var writers = DiskWriters.shared
+    @ObservedObject private var settings = Settings.shared
+    @State private var week = false
+
+    var body: some View {
+        Section {
+            Picker("", selection: $week) {
+                Text(tr("Днес", "Today")).tag(false)
+                Text(tr("Последните 7 дни", "Last 7 days")).tag(true)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            let period = week ? 7 : 1
+            let rows = writers.top(days: period)
+            let rest = writers.ssdWritten(days: period).map { $0 - writers.total(days: period) }
+            if rows.isEmpty {
+                Text(tr("Събира се… (обновява се веднъж на минута)", "Collecting… (updates once a minute)"))
+                    .foregroundStyle(.secondary)
+            } else {
+                VStack(spacing: 6) {   // one cell for the whole list: much lighter to draw than a cell per row
+                    ForEach(rows) { row in
+                        if row.id != rows.first?.id { Divider() }
+                        HStack(spacing: 10) {
+                            AppIconView(image: row.icon.flatMap { AppIcons.small(bundleID: $0) })
+                            Text(row.id).lineLimit(1)
+                            Spacer()
+                            Text(bytesText(row.bytes)).monospacedDigit().foregroundStyle(.secondary)
+                        }
+                    }
+                    if let rest, rest >= 1e6 {
+                        Divider()
+                        HStack(spacing: 10) {
+                            Image(systemName: "applelogo").foregroundStyle(.secondary).frame(width: 22, height: 22)
+                            Text(tr("Останалото: macOS и кратки програми", "The rest: macOS and short-lived programs")).lineLimit(1)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Text(bytesText(rest)).monospacedDigit().foregroundStyle(.secondary)
+                        }
+                        .help(tr("Колкото е отчело самото SSD, минус приложенията отгоре: swap, индексът на Spotlight, системните дневници, Time Machine и програми, приключили за по-малко от минута.",
+                                 "What the SSD itself counted, minus the apps above: swap, the Spotlight index, system logs, Time Machine and programs that ended within a minute."))
+                    }
+                }
+            }
+        } header: {
+            Text(tr("Кой пише най-много по SSD-то", "Who writes the most to the SSD"))
+        } footer: {
+            Text(footer)
+                .font(.callout)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var footer: String {
+        var text = tr("Колко е записало всяко приложение на диска; проверява се веднъж на минута. Части от macOS, които искат админ права (swap, част от Spotlight, Time Machine), и програми, приключили за секунди, не се виждат поотделно: те са в „Останалото“.",
+                      "How much each app wrote to the disk, checked once a minute. Parts of macOS that need admin rights (swap, part of Spotlight, Time Machine) and programs that ended within seconds can't be seen one by one: they're in “The rest”.")
+        let start = writers.countingSince
+        let periodStart = Calendar.current.startOfDay(for: Calendar.current.date(byAdding: .day, value: week ? -6 : 0, to: Date()) ?? Date())
+        if start > periodStart {   // the list doesn't cover the whole period yet
+            let format = DateFormatter()
+            format.dateFormat = "d.MM HH:mm"
+            text += tr(" Броенето започна на \(format.string(from: start)).", " Counting started on \(format.string(from: start)).")
+        }
+        return text
     }
 }
 
