@@ -202,7 +202,7 @@ struct HistoryChart: View {
 
     /// "Safari 30% · Code 8%": the apps that used the most around this point (the stretch halfway to its
     /// neighbours, at least a minute). Not on the 3-minute chart: apps are kept per minute.
-    /// Where there's nothing yet, it says why instead of showing nothing.
+    /// Before apps were first recorded (or while asleep) it adds nothing; for the newest minute it says it's coming.
     private func whoUsed(_ index: Int) -> String {
         guard let apps, range != .minutes3 else { return "" }
         let time = samples[index].time
@@ -226,15 +226,9 @@ struct HistoryChart: View {
             }
             .joined(separator: " · ")
         guard names.isEmpty else { return names }
-        guard let covered = AppHistory.shared.covered(apps), time < covered.upperBound else {
+        if Date().timeIntervalSince1970 - time < 90, (AppHistory.shared.covered(apps)?.upperBound ?? 0) < time {
             return tr("Кой е бил: след минута", "Who: in a minute")   // the newest minute is stored when it ends
         }
-        if time < covered.lowerBound {
-            let start = Date(timeIntervalSince1970: covered.lowerBound)
-            let format = DateFormatter()
-            format.dateFormat = Calendar.current.isDateInToday(start) ? "HH:mm" : "d.MM HH:mm"
-            return tr("Кой е бил: записва се от ", "Who: recorded since ") + format.string(from: start)
-        }
-        return ""   // asleep then, or nothing worth naming
+        return ""
     }
 }
