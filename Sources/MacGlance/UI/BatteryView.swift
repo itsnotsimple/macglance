@@ -11,6 +11,7 @@ final class BatteryModel: ObservableObject {
     @Published private(set) var powerUsage: PowerUsage?
     @Published private(set) var appleHealth: (maximumCapacity: String, condition: String)?
     @Published private(set) var tips: [BatteryTip] = []
+    @Published private(set) var sleep: [SleepSession]?   // nil while the power log is being read
     private let reader = BatteryReader()
     private let temperatures = TemperatureReader()
     private let power = PowerReader()
@@ -21,6 +22,7 @@ final class BatteryModel: ObservableObject {
 
     func start() {
         refresh()
+        SleepLog.sessions { [weak self] in self?.sleep = $0 }   // ~4 s in the background, then kept 10 min
         if appleHealth == nil {   // ~0.06 s outside the app, once per window
             DispatchQueue.global(qos: .utility).async {
                 let health = BatteryReader.appleHealth()
@@ -109,6 +111,8 @@ struct BatteryView: View {
                         row(tr("Подава в момента", "Delivering now"), model.chargerWatts.map(watts) ?? "–")
                     }
                 }
+
+                SleepSection(sessions: model.sleep)
 
                 Section(tr("Как да пазиш батерията", "How to look after the battery")) {
                     ForEach(BatteryTips.general, id: \.self) { tip in
@@ -229,5 +233,90 @@ private struct ChargeMeter: View {
             }
         }
         .frame(height: 8)
+    }
+}
+
+// MARK: - While asleep
+
+/// The last nights: how long, how much battery, how often macOS woke the Mac up and for what.
+private struct SleepSection: View {
+    let sessions: [SleepSession]?
+    @ObservedObject private var settings = Settings.shared
+
+    var body: some View {
+        Section {
+            if let sessions {
+                if sessions.isEmpty {
+                    Text(tr("Още няма записан сън.", "No sleep recorded yet.")).foregroundStyle(.secondary)
+                }
+                ForEach(sessions.prefix(5)) { session in
+                    VStack(alignment: .leading, spacing: 3) {
+                        HStack {
+                            Text(period(session))
+                            Spacer()
+                            Text(battery(session))
+                                .monospacedDigit()
+                                .foregroundStyle(session.percentLost.map { $0 >= 10 ? Color.orange : .secondary } ?? .secondary)
+                        }
+                        Text(details(session))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.vertical, 2)
+                }
+            } else {
+                HStack {
+                    ProgressView().controlSize(.small)
+                    Text(tr("Чета дневника на захранването…", "Reading the power log…")).foregroundStyle(.secondary)
+                }
+            }
+        } header: {
+            Text(tr("Докато Макът спи", "While the Mac sleeps"))
+        } footer: {
+            Text(tr("Полусъбуждане: Макът за секунди се събужда с изгасен екран, за да провери поща, iCloud или задачи на macOS. Нормално е и на батерия струва малко. Ако губи много за една нощ, най-честите причини са изброени тук. Данните са от дневника на macOS за последната седмица.",
+                    "A dark wake: the Mac wakes for a few seconds with the screen off to check mail, iCloud or macOS tasks. It's normal and costs little on battery. If it loses a lot in one night, the most common causes are listed here. The data comes from macOS's power log for the last week."))
+                .font(.callout)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func period(_ s: SleepSession) -> String {
+        let day = DateFormatter()
+        day.locale = Locale(identifier: settings.language == .bg ? "bg_BG" : "en_US")
+        day.dateFormat = "EEE d.MM, HH:mm"
+        let time = DateFormatter()
+        time.dateFormat = Calendar.current.isDate(s.start, inSameDayAs: s.end) ? "HH:mm" : "EEE HH:mm"
+        time.locale = day.locale
+        let hours = Int(s.duration / 3600), minutes = Int(s.duration / 60) % 60
+        let length = hours > 0 ? tr("\(hours) ч \(minutes) мин", "\(hours) h \(minutes) min") : tr("\(minutes) мин", "\(minutes) min")
+        // After midnight and before 6, "Mon 01:43" reads like Monday afternoon's night: say whose night it is.
+        let night = Calendar.current.component(.hour, from: s.start) < 6 ? tr("нощта срещу ", "the night before ") : ""
+        return night + day.string(from: s.start) + " → " + time.string(from: s.end) + " · " + length
+    }
+
+    private func battery(_ s: SleepSession) -> String {
+        guard s.onBattery else { return tr("на зарядно", "on the charger") }
+        guard let lost = s.percentLost else { return "–" }
+        return "−\(lost)%"
+    }
+
+    private func details(_ s: SleepSession) -> String {
+        var parts = [tr("Полусъбуждания: \(s.darkWakes)", "Dark wakes: \(s.darkWakes)")
+                     + (s.awakeSeconds >= 60 ? tr(" (общо \(s.awakeSeconds / 60) мин буден)", " (\(s.awakeSeconds / 60) min awake in total)") : "")]
+        let causes = s.causes.sorted { $0.value > $1.value }.prefix(2).map { "\(causeName($0.key)) \($0.value)" }
+        if !causes.isEmpty { parts.append(causes.joined(separator: ", ")) }
+        let wakers = s.wakers.sorted { $0.value > $1.value }.prefix(2).map { "\($0.key) \($0.value)" }
+        if !wakers.isEmpty { parts.append(tr("най-често: ", "most often: ") + wakers.joined(separator: ", ")) }
+        return parts.joined(separator: " · ")
+    }
+
+    private func causeName(_ key: String) -> String {
+        switch key {
+        case "timer": tr("планирани задачи", "scheduled tasks")
+        case "network": tr("мрежа", "network")
+        case "notification": tr("известия", "notifications")
+        case "power": tr("зарядно", "charger")
+        default: tr("друго", "other")
+        }
     }
 }
