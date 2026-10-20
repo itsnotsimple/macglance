@@ -37,14 +37,14 @@
   </tr>
   <tr>
     <td><img src="docs/energy.png" alt="Energy page"><br><b>Energy</b>: watts per app as measured by macOS, energy per day and what it costs</td>
-    <td><img src="docs/disk.png" alt="Disk page"><br><b>Disk</b>: free space, read/write speed, SSD health straight from the drive (wear, data written)</td>
+    <td><img src="docs/disk.png" alt="Disk page"><br><b>Disk</b>: free space, read/write speed, clearing app caches, SSD health straight from the drive, and which apps write the most to it</td>
   </tr>
   <tr>
-    <td><img src="docs/network.png" alt="Network page"><br><b>Network</b>: speed, latency, Wi-Fi signal, today's traffic (with a heads-up on an iPhone hotspot)</td>
+    <td><img src="docs/network.png" alt="Network page"><br><b>Network</b>: speed, latency, Wi-Fi signal, data per app today and how much of it on an iPhone hotspot</td>
     <td><img src="docs/temperature.png" alt="Temperatures page"><br><b>Temperatures</b>: CPU, GPU, SSD and battery, plus whether macOS is slowing the chip down because of heat</td>
   </tr>
   <tr>
-    <td><img src="docs/battery.png" alt="Battery page"><br><b>Battery</b>: health, cycles, capacity, charger, and tips for what it's doing right now</td>
+    <td><img src="docs/battery.png" alt="Battery page"><br><b>Battery</b>: health, cycles, capacity, charger, tips, and what woke the Mac while it slept (with what you can switch off)</td>
     <td><img src="docs/settings.png" alt="Settings page"><br><b>Settings</b>: language, what goes in the menu bar, notifications, global shortcuts, updates</td>
   </tr>
 </table>
@@ -76,7 +76,7 @@ After that it updates itself (Settings → Updates). Every update is signed, and
 ## Light by design
 
 - Native Swift, no Electron. The only helper is macOS's own `nettop`, which counts data per app and uses next to no CPU (a watchdog stops it if that ever changes).
-- Numbers you hide from the menu bar aren't read at all. Scanning every process and reading the detailed sensors happen only while their page or the menu is open; app icons are drawn once and kept.
+- Numbers you hide from the menu bar aren't read at all. Counting SSD writes per app is a 5 ms check once a minute. Scanning every process and reading the detailed sensors happen only while their page or the menu is open; app icons are drawn once and kept.
 - Measured on an M5 MacBook Air: with only the menu bar, about 0.5% of one core (0.05% of the whole 10-core chip) and under 20 MB of memory. With the window open on the busiest page (CPU), about 1%.
 
 ## Privacy
@@ -93,6 +93,9 @@ No account, no analytics. MacGlance only goes online to check GitHub for updates
 | Temperatures | SMC and HID sensors |
 | Thermal throttling, real core speeds | macOS's thermal pressure level and IOReport's time at each speed step |
 | SSD health | the drive's NVMe SMART log |
+| SSD writes per app | the bytes the kernel counts for every process; the rest is the SMART total minus the apps |
+| Data per app | macOS's `nettop` |
+| Sleep and wake-ups | macOS's power log (`pmset -g log`) |
 
 ## Build from source
 
