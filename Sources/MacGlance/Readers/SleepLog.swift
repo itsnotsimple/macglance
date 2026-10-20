@@ -10,7 +10,7 @@ struct SleepSession: Identifiable {
     let darkWakes: Int           // brief wake-ups with the screen off
     let awakeSeconds: Int        // time spent in them
     let causes: [String: Int]    // why it woke (scheduled task, network…) → how often
-    let wakers: [String: Int]    // which service asked for the scheduled wake-ups → how often
+    let wakers: [String: Int]    // which service asked for the scheduled wake-ups (its system name) → how often
 
     var id: Date { start }
     var duration: TimeInterval { end.timeIntervalSince(start) }
@@ -145,7 +145,7 @@ enum SleepLog {
                 let value = part[info.upperBound...].prefix { $0 != "\"" }
                 if let last = value.split(separator: ":").last, !last.isEmpty { service = String(last) }
             }
-            return (friendlyName(service), seconds)
+            return (service, seconds)   // the system name; friendlyName(_:) when showing it
         }
     }
 

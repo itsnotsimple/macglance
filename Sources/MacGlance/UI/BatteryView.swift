@@ -249,6 +249,15 @@ private struct SleepSection: View {
                 if sessions.isEmpty {
                     Text(tr("Още няма записан сън.", "No sleep recorded yet.")).foregroundStyle(.secondary)
                 }
+                ForEach(SleepTips.tips(for: sessions)) { tip in
+                    HStack(alignment: .top) {
+                        Label { Text(tip.text) } icon: { tipIcon(tip.kind) }
+                        Spacer(minLength: 8)
+                        if let pane = tip.settings {
+                            Button(tr("Отвори", "Open")) { SleepTips.openSettings(pane) }
+                        }
+                    }
+                }
                 ForEach(sessions.prefix(5)) { session in
                     VStack(alignment: .leading, spacing: 3) {
                         HStack {
@@ -305,9 +314,18 @@ private struct SleepSection: View {
                      + (s.awakeSeconds >= 60 ? tr(" (общо \(s.awakeSeconds / 60) мин буден)", " (\(s.awakeSeconds / 60) min awake in total)") : "")]
         let causes = s.causes.sorted { $0.value > $1.value }.prefix(2).map { "\(causeName($0.key)) \($0.value)" }
         if !causes.isEmpty { parts.append(causes.joined(separator: ", ")) }
-        let wakers = s.wakers.sorted { $0.value > $1.value }.prefix(2).map { "\($0.key) \($0.value)" }
+        let wakers = s.wakers.sorted { $0.value > $1.value }.prefix(2).map { "\(SleepLog.friendlyName($0.key)) \($0.value)" }
         if !wakers.isEmpty { parts.append(tr("най-често: ", "most often: ") + wakers.joined(separator: ", ")) }
         return parts.joined(separator: " · ")
+    }
+
+    @ViewBuilder
+    private func tipIcon(_ kind: BatteryTip.Kind) -> some View {
+        switch kind {
+        case .good: Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+        case .info: Image(systemName: "lightbulb.fill").foregroundStyle(.yellow)
+        case .warning: Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+        }
     }
 
     private func causeName(_ key: String) -> String {
