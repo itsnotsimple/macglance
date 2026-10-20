@@ -202,18 +202,19 @@ struct HistoryChart: View {
 
     /// "Safari 30% · Code 8%": the apps that used the most around this point (the stretch halfway to its
     /// neighbours, at least a minute). Not on the 3-minute chart: apps are kept per minute.
+    /// Where there's nothing yet, it says why instead of showing nothing.
     private func whoUsed(_ index: Int) -> String {
         guard let apps, range != .minutes3 else { return "" }
         let time = samples[index].time
         let before = index > 0 ? (samples[index - 1].time + time) / 2 : time
         let after = index + 1 < samples.count ? (time + samples[index + 1].time) / 2 : time
-        return AppHistory.shared.top(apps, from: min(before, time - 30), to: max(after, time + 30))
+        let names = AppHistory.shared.top(apps, from: min(before, time - 30), to: max(after, time + 30))
             .compactMap { app -> String? in
                 let value: String
                 switch apps {
                 case .cpu, .gpu:
-                    guard app.value >= 0.5 else { return nil }
-                    value = String(format: "%.0f%%", app.value)
+                    guard app.value >= 0.1 else { return nil }
+                    value = String(format: app.value < 10 ? "%.1f%%" : "%.0f%%", app.value)
                 case .power:
                     guard app.value >= 0.05 else { return nil }
                     value = watts(app.value)
@@ -224,5 +225,16 @@ struct HistoryChart: View {
                 return app.name + " " + value
             }
             .joined(separator: " · ")
+        guard names.isEmpty else { return names }
+        guard let covered = AppHistory.shared.covered(apps), time < covered.upperBound else {
+            return tr("Кой е бил: след минута", "Who: in a minute")   // the newest minute is stored when it ends
+        }
+        if time < covered.lowerBound {
+            let start = Date(timeIntervalSince1970: covered.lowerBound)
+            let format = DateFormatter()
+            format.dateFormat = Calendar.current.isDateInToday(start) ? "HH:mm" : "d.MM HH:mm"
+            return tr("Кой е бил: записва се от ", "Who: recorded since ") + format.string(from: start)
+        }
+        return ""   // asleep then, or nothing worth naming
     }
 }

@@ -112,6 +112,12 @@ final class AppHistory {
 
     // MARK: - Reading
 
+    /// From when to when this kind has been recorded; nil until the first minute is in.
+    func covered(_ kind: Kind) -> ClosedRange<TimeInterval>? {
+        guard let first = records[kind]?.first, let last = records[kind]?.last else { return nil }
+        return (first.time - Double(first.duration))...last.time
+    }
+
     /// The apps that used the most between `from` and `to`, in the chart's own unit: % of the whole CPU,
     /// watts, % of the GPU, or bytes per second. Averaged over the time covered, like the chart's line.
     func top(_ kind: Kind, from: TimeInterval, to: TimeInterval, count: Int = 3) -> [(name: String, value: Double)] {
