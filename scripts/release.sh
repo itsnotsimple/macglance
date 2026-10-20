@@ -25,7 +25,7 @@ ln -s /Applications "$STAGE/Applications"
 hdiutil create -quiet -volname "MacGlance $VERSION" -srcfolder "$STAGE" -ov -format UDZO $DMG
 rm -rf "$STAGE"
 
-git commit -qam "Release $VERSION"${CO_AUTHOR:+$'\n\n'"Co-Authored-By: $CO_AUTHOR"}   # CO_AUTHOR: optional trailer
+git commit -qam "Release $VERSION"
 git tag "v$VERSION"
 git push -q origin main "v$VERSION"
 

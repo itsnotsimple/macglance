@@ -13,6 +13,7 @@ final class Alerts {
     private let settings = Settings.shared
     private let processes = ProcessCPUReader()
     private let battery = BatteryReader()
+    private let powerReader = PowerReader()
     private let temperatures = TemperatureReader()
     private let appMemory = AppMemoryReader()
     private var lastCheck: [Kind: Date] = [:]
@@ -75,11 +76,12 @@ final class Alerts {
         }
         let since = weakChargerSince ?? Date()
         weakChargerSince = since
-        guard Date().timeIntervalSince(since) >= 120 else { return }   // a short spike is normal
-        let rating = info.adapterWatts.map { " (\($0) W)" } ?? ""
+        guard Date().timeIntervalSince(since) >= 120 else { return }   // right after plugging in, it still reads the old drain
+        // Only if the Mac really draws more than the charger delivers.
+        guard let power = powerReader.read(detailed: false), power.system > power.adapter + 1 else { return }
         send(.charger, title: tr("Зарядното не стига", "The charger can't keep up"),
-             body: tr("Макът гълта повече, отколкото зарядното\(rating) дава, и батерията пада, макар и включен.",
-                      "The Mac uses more than the charger\(rating) gives, so the battery drains while plugged in."))
+             body: tr("Макът харчи \(watts(power.system)), а от зарядното идват \(watts(power.adapter)), затова батерията пада. Провери кабела и зарядното.",
+                      "The Mac uses \(watts(power.system)) but gets \(watts(power.adapter)) from the charger, so the battery drains. Check the cable and charger."))
     }
 
     func checkBatteryHeat() {

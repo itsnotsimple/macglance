@@ -48,8 +48,15 @@ final class BatteryModel: ObservableObject {
         updateTips()
     }
 
+    private var drainingOnChargerSince: Date?
+
     private func updateTips() {
         guard let battery else { tips = []; return }
+        if battery.isPluggedIn && battery.watts < -0.5 {
+            drainingOnChargerSince = drainingOnChargerSince ?? Date()
+        } else {
+            drainingOnChargerSince = nil
+        }
         let busiest = battery.isPluggedIn ? nil : processes.top(1).first   // only matters on battery
         tips = BatteryTips.now(.init(
             battery: battery,
@@ -57,7 +64,8 @@ final class BatteryModel: ObservableObject {
             power: powerUsage,
             healthPercent: appleHealth.flatMap { Int($0.maximumCapacity.filter(\.isNumber)) },
             busiestApp: busiest.map { ($0.name, $0.percent) },
-            lowPowerMode: ProcessInfo.processInfo.isLowPowerModeEnabled))
+            lowPowerMode: ProcessInfo.processInfo.isLowPowerModeEnabled,
+            drainingOnChargerFor: drainingOnChargerSince.map { Date().timeIntervalSince($0) } ?? 0))
     }
 
     /// System Settings → Battery.
@@ -95,7 +103,9 @@ struct BatteryView: View {
 
                 if battery.isPluggedIn {
                     Section(tr("Зарядно", "Charger")) {
-                        row(tr("Мощност на зарядното", "Charger rating"), battery.adapterWatts.map { "\($0) W" } ?? "–")
+                        row(tr("Макът приема до", "The Mac accepts up to"), battery.adapterWatts.map { "\($0) W" } ?? "–")
+                            .help(tr("Колко ватa са договорили Макът и зарядното. Зависи от Мака, не само от зарядното: MacBook Air приема около 70 W дори от зарядно 165 W.",
+                                     "The watts the Mac and the charger agreed on. It depends on the Mac, not just the charger: a MacBook Air takes about 70 W even from a 165 W charger."))
                         row(tr("Подава в момента", "Delivering now"), model.chargerWatts.map(watts) ?? "–")
                     }
                 }

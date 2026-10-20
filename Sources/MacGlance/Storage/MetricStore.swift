@@ -96,20 +96,38 @@ final class MetricStore {
         return downsample(older + recent.filter { $0.time >= from }, from: from, to: now, maxPoints: maxPoints)
     }
 
+    /// What's on disk: the minute averages and, so an update or restart doesn't empty the short charts,
+    /// the full-detail last 2 hours too (~0.4 MB).
+    private struct Stored: Codable {
+        var minutes: [String: [Sample]]
+        var detailed: [String: [Sample]]
+    }
+
     func save() {
         lastSave = Date()
-        let stored = Dictionary(uniqueKeysWithValues: minutes.map { ($0.key.rawValue, $0.value) })
+        let stored = Stored(minutes: Dictionary(uniqueKeysWithValues: minutes.map { ($0.key.rawValue, $0.value) }),
+                            detailed: Dictionary(uniqueKeysWithValues: detailed.map { ($0.key.rawValue, $0.value) }))
         let encoder = PropertyListEncoder()
         encoder.outputFormat = .binary
         if let data = try? encoder.encode(stored) { try? data.write(to: file, options: .atomic) }
     }
 
     private func load() {
-        guard let data = try? Data(contentsOf: file),
-              let stored = try? PropertyListDecoder().decode([String: [Sample]].self, from: data) else { return }
-        let cutoff = Date().timeIntervalSince1970 - Self.keptSpan
-        for (key, samples) in stored {
-            if let metric = Metric(rawValue: key) { minutes[metric] = samples.filter { $0.time >= cutoff } }
+        guard let data = try? Data(contentsOf: file) else { return }
+        var storedMinutes: [String: [Sample]] = [:]
+        var storedDetail: [String: [Sample]] = [:]
+        if let stored = try? PropertyListDecoder().decode(Stored.self, from: data) {
+            storedMinutes = stored.minutes
+            storedDetail = stored.detailed
+        } else if let old = try? PropertyListDecoder().decode([String: [Sample]].self, from: data) {
+            storedMinutes = old   // up to v0.29: minutes only
+        }
+        let now = Date().timeIntervalSince1970
+        for (key, samples) in storedMinutes {
+            if let metric = Metric(rawValue: key) { minutes[metric] = samples.filter { $0.time >= now - Self.keptSpan } }
+        }
+        for (key, samples) in storedDetail {
+            if let metric = Metric(rawValue: key) { detailed[metric] = samples.filter { $0.time >= now - Self.detailedSpan } }
         }
     }
 

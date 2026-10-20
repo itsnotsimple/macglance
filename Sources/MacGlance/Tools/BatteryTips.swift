@@ -17,6 +17,7 @@ enum BatteryTips {
         let healthPercent: Int?                // Apple's "Maximum Capacity"
         let busiestApp: (name: String, percent: Double)?
         let lowPowerMode: Bool
+        var drainingOnChargerFor: TimeInterval = 0   // how long the battery has been draining while plugged in
     }
 
     /// Tips for this moment, most important first.
@@ -40,12 +41,16 @@ enum BatteryTips {
             }
         }
 
-        // Plugged in, yet the battery is draining: the charger is too weak for what the Mac does.
-        if b.isPluggedIn && b.watts < -0.5 {
-            let rating = b.adapterWatts.map { " (\($0) W)" } ?? ""
+        // Plugged in, yet the battery keeps draining: the charger can't keep up with the Mac.
+        // Only after 2 minutes in a row, and only if the Mac really draws more than the charger gives:
+        // right after plugging in, the battery still reports the old discharge for a few seconds.
+        if b.isPluggedIn && b.watts < -0.5 && s.drainingOnChargerFor >= 120,
+           let power = s.power, power.system > power.adapter + 1 {
             tips.append(.init(kind: .warning, text: tr(
-                "Зарядното\(rating) не стига: Макът гълта повече, отколкото то дава, и батерията пада, макар и включен. Ползвай по-мощно зарядно.",
-                "The charger\(rating) can't keep up: the Mac uses more than it gives, so the battery drains while plugged in. Use a stronger charger.")))
+                "Зарядното не стига: Макът харчи \(watts(power.system)), а от зарядното идват \(watts(power.adapter)), затова батерията пада. Провери кабела и зарядното (USB-C порт на компютър или слабо зарядно не стигат).",
+                "The charger can't keep up: the Mac uses \(watts(power.system)) but gets \(watts(power.adapter)) from it, so the battery drains. Check the cable and charger (a computer's USB-C port or a weak charger won't do).")))
+        } else if b.isPluggedIn && b.watts < -0.5 {
+            // briefly draining right after plugging in: say nothing
         } else if b.isPluggedIn && !b.isCharging && !b.isFull {
             tips.append(.init(kind: .good, text: tr(
                 "macOS е спрял зареждането на \(b.percent)%, за да пази батерията. Спокойно остави Мака на зарядно.",
