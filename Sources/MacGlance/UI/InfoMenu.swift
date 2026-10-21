@@ -179,24 +179,63 @@ final class InfoMenu: NSObject, NSMenuDelegate {
 
     /// An info line. It has no action, so it can't be clicked.
     private func add(_ row: Row, indent: Int = 0) {
-        let item = NSMenuItem(title: label(row), action: nil, keyEquivalent: "")
-        item.indentationLevel = indent
+        let item = NSMenuItem()
+        item.view = InfoRowView(label: label(row), indent: indent)
         rows[row] = item
         menu.addItem(item)
     }
 
-    /// Label on the left, value aligned right.
+    /// Label on the left, value against the right edge.
     private func set(_ row: Row, _ value: String, label custom: String? = nil) {
-        let label = custom ?? label(row)
-        let style = NSMutableParagraphStyle()
-        style.tabStops = [NSTextTab(textAlignment: .right, location: 230)]
-        let text = NSMutableAttributedString(string: "\(label)\t\(value)", attributes: [
-            .font: NSFont.monospacedDigitSystemFont(ofSize: 13, weight: .regular),
-            .foregroundColor: NSColor.labelColor,   // explicit, or AppKit grays out unclickable lines
-            .paragraphStyle: style,
+        (rows[row]?.view as? InfoRowView)?.show(label: custom ?? label(row), value: value)
+    }
+}
+
+/// One line of numbers in the menu, laid out by MacGlance rather than by macOS. macOS leaves a different
+/// amount of room right of a menu's text in each version (on some, three times the left margin); here
+/// both sides get the same margin, and every value ends on the same edge, indented lines included.
+private final class InfoRowView: NSView {
+    private static let margin: CGFloat = 16
+    private static let indentStep: CGFloat = 12
+    /// The height of a normal menu line on this macOS (24 pt on recent versions, 22 on older ones).
+    private static let height: CGFloat = {
+        let probe = NSMenu()
+        probe.addItem(withTitle: "A", action: nil, keyEquivalent: "")
+        let one = probe.size.height
+        probe.addItem(withTitle: "B", action: nil, keyEquivalent: "")
+        let height = probe.size.height - one
+        return height > 10 && height < 40 ? height : 22
+    }()
+    private let label = NSTextField(labelWithString: "")
+    private let value = NSTextField(labelWithString: "")
+
+    init(label text: String, indent: Int) {
+        super.init(frame: NSRect(x: 0, y: 0, width: 262, height: Self.height))   // the menu's width: room for "Disk  818 GB of 995 GB free"
+        autoresizingMask = [.width]   // a wider menu (a long "Free up RAM (last time: …)") keeps the value at the right margin
+        for field in [label, value] {
+            field.font = .monospacedDigitSystemFont(ofSize: 13, weight: .regular)
+            field.lineBreakMode = .byTruncatingTail
+            field.translatesAutoresizingMaskIntoConstraints = false
+            addSubview(field)
+        }
+        label.textColor = .secondaryLabelColor
+        label.stringValue = text
+        label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)   // a long app name gives way, the number doesn't
+        value.textColor = .labelColor
+        value.alignment = .right
+        NSLayoutConstraint.activate([
+            label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Self.margin + CGFloat(indent) * Self.indentStep),
+            label.centerYAnchor.constraint(equalTo: centerYAnchor),
+            value.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Self.margin),
+            value.centerYAnchor.constraint(equalTo: centerYAnchor),
+            value.leadingAnchor.constraint(greaterThanOrEqualTo: label.trailingAnchor, constant: 8),
         ])
-        text.addAttribute(.foregroundColor, value: NSColor.secondaryLabelColor,
-                          range: NSRange(location: 0, length: (label as NSString).length))
-        rows[row]?.attributedTitle = text
+    }
+
+    required init?(coder: NSCoder) { nil }
+
+    func show(label text: String, value newValue: String) {
+        if label.stringValue != text { label.stringValue = text }   // only what changed: no relayout every second
+        if value.stringValue != newValue { value.stringValue = newValue }
     }
 }
