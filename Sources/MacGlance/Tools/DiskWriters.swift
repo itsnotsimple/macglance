@@ -15,6 +15,7 @@ final class DiskWriters: ObservableObject {
     /// A row in the list: known macOS processes merged under one name.
     struct Row: Identifiable {
         let id: String       // the name shown
+        let key: String      // bundle id, or the process name (for the tip and the actions)
         let icon: String?    // a bundle id to take the icon from
         let bytes: Double
     }
@@ -120,17 +121,17 @@ final class DiskWriters: ObservableObject {
 
     /// The biggest writers over the last `count` days (1 = today), at least 1 MB each.
     func top(days count: Int, limit: Int = 10) -> [Row] {
-        var totals: [String: (icon: String?, bytes: Double)] = [:]
-        for key in keys(count) {
-            guard let apps = days[key] else { continue }
+        var totals: [String: (key: String, icon: String?, bytes: Double)] = [:]
+        for day in keys(count) {
+            guard let apps = days[day] else { continue }
             for (key, writer) in apps {
                 let label = ProcessNames.label(key: key, name: writer.name)
-                totals[label.name, default: (label.icon, 0)].bytes += writer.bytes
+                totals[label.name, default: (key, label.icon, 0)].bytes += writer.bytes
             }
         }
         return totals.filter { $0.value.bytes >= 1e6 }
             .sorted { $0.value.bytes > $1.value.bytes }
             .prefix(limit)
-            .map { Row(id: $0.key, icon: $0.value.icon, bytes: $0.value.bytes) }
+            .map { Row(id: $0.key, key: $0.value.key, icon: $0.value.icon, bytes: $0.value.bytes) }
     }
 }

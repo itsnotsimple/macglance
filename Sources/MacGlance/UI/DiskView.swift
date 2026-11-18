@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// Live data for the Disk page. Refreshes only while the page is on screen;
@@ -90,7 +91,7 @@ struct DiskView: View {
                 }
             }
 
-            WritersSection()
+            WritersSection(liveTotal: model.disk?.writePerSecond)
         }
         .formStyle(.grouped)
         .onAppear { model.start() }
@@ -162,50 +163,57 @@ private struct Meter: View {
 
 // MARK: - Who writes
 
-/// The apps that wrote the most to the SSD, today or over the last 7 days.
+/// The apps that write the most to the SSD: right now, today, or over the last 7 or 30 days.
+/// Each row says what it is; an app can be quit, shown in Finder or moved to the Trash.
 private struct WritersSection: View {
+    let liveTotal: Double?   // the whole disk's write speed, for "The rest" under "Now"
     @ObservedObject private var writers = DiskWriters.shared
+    @ObservedObject private var live = LiveWriters.shared
     @ObservedObject private var settings = Settings.shared
-    @State private var week = false
+    @State private var period = 1   // 0 = now, otherwise days
+    @State private var trashing: Item?
+    @State private var result: String?
+
+    /// One row, whichever period it comes from.
+    struct Item: Identifiable {
+        let id: String      // the name shown
+        let key: String
+        let icon: String?
+        let value: String
+    }
 
     var body: some View {
         Section {
-            Picker("", selection: $week) {
-                Text(tr("Днес", "Today")).tag(false)
-                Text(tr("Последните 7 дни", "Last 7 days")).tag(true)
+            Picker("", selection: $period) {
+                Text(tr("Сега", "Now")).tag(0)
+                Text(tr("Днес", "Today")).tag(1)
+                Text(tr("7 дни", "7 days")).tag(7)
+                Text(tr("30 дни", "30 days")).tag(30)
             }
             .pickerStyle(.segmented)
             .labelsHidden()
-            let period = week ? 7 : 1
-            let rows = writers.top(days: period)
-            let rest = writers.ssdWritten(days: period).map { $0 - writers.total(days: period) }
-            if rows.isEmpty {
-                Text(tr("Събира се… (обновява се веднъж на минута)", "Collecting… (updates once a minute)"))
+
+            let (items, rest) = content
+            if items.isEmpty {
+                Text(period == 0
+                     ? (live.ready ? tr("В момента никое приложение не пише осезаемо.", "No app is writing much right now.")
+                                   : tr("Измерване…", "Measuring…"))
+                     : tr("Събира се… (обновява се веднъж на минута)", "Collecting… (updates once a minute)"))
                     .foregroundStyle(.secondary)
             } else {
                 VStack(spacing: 6) {   // one cell for the whole list: much lighter to draw than a cell per row
-                    ForEach(rows) { row in
-                        if row.id != rows.first?.id { Divider() }
-                        HStack(spacing: 10) {
-                            AppIconView(image: row.icon.flatMap { AppIcons.small(bundleID: $0) })
-                            Text(row.id).lineLimit(1)
-                            Spacer()
-                            Text(bytesText(row.bytes)).monospacedDigit().foregroundStyle(.secondary)
-                        }
+                    ForEach(items) { item in
+                        if item.id != items.first?.id { Divider() }
+                        row(item)
                     }
-                    if let rest, rest >= 1e6 {
+                    if let rest {
                         Divider()
-                        HStack(spacing: 10) {
-                            Image(systemName: "applelogo").foregroundStyle(.secondary).frame(width: 22, height: 22)
-                            Text(tr("Останалото: macOS и кратки програми", "The rest: macOS and short-lived programs")).lineLimit(1)
-                                .foregroundStyle(.secondary)
-                            Spacer()
-                            Text(bytesText(rest)).monospacedDigit().foregroundStyle(.secondary)
-                        }
-                        .help(tr("Колкото е отчело самото SSD, минус приложенията отгоре: swap, индексът на Spotlight, системните дневници, Time Machine и програми, приключили за по-малко от минута.",
-                                 "What the SSD itself counted, minus the apps above: swap, the Spotlight index, system logs, Time Machine and programs that ended within a minute."))
+                        restRow(rest)
                     }
                 }
+            }
+            if let result {
+                Text(result).font(.callout).foregroundStyle(.secondary)
             }
         } header: {
             Text(tr("Кой пише най-много по SSD-то", "Who writes the most to the SSD"))
@@ -214,13 +222,105 @@ private struct WritersSection: View {
                 .font(.callout)
                 .foregroundStyle(.secondary)
         }
+        .onAppear { if period == 0 { live.start() } }
+        .onDisappear { live.stop() }
+        .onChange(of: period) { _, now in
+            result = nil
+            if now == 0 { live.start() } else { live.stop() }
+        }
+        .confirmationDialog(trashing.map { tr("Да преместя \($0.id) в кошчето?", "Move \($0.id) to the Trash?") } ?? "",
+                            isPresented: Binding(get: { trashing != nil }, set: { if !$0 { trashing = nil } }),
+                            presenting: trashing) { item in
+            Button(tr("Затвори и премести в кошчето", "Quit and move to Trash"), role: .destructive) { trash(item) }
+            Button(tr("Отказ", "Cancel"), role: .cancel) {}
+        } message: { _ in
+            Text(tr("Приложението ще се затвори и ще отиде в кошчето: можеш да го върнеш оттам, докато не го изпразниш. Настройките и данните му остават.",
+                    "The app quits and goes to the Trash: you can put it back from there until you empty it. Its settings and data stay."))
+        }
+    }
+
+    /// The rows for the chosen period, and what the SSD wrote beyond them ("The rest"), if it's worth a row.
+    private var content: ([Item], Double?) {
+        if period == 0 {
+            let items = live.rows.map { Item(id: $0.id, key: $0.key, icon: $0.icon, value: speedText($0.perSecond)) }
+            let rest = liveTotal.map { $0 - live.rows.map(\.perSecond).reduce(0, +) }
+            return (items, live.ready && (rest ?? 0) >= 100_000 ? rest : nil)
+        }
+        let items = writers.top(days: period).map { Item(id: $0.id, key: $0.key, icon: $0.icon, value: bytesText($0.bytes)) }
+        let rest = writers.ssdWritten(days: period).map { $0 - writers.total(days: period) }
+        return (items, (rest ?? 0) >= 1e6 ? rest : nil)
+    }
+
+    private func row(_ item: Item) -> some View {
+        let app = WriterTips.running(item.key)
+        let installed = WriterTips.installed(item.key)
+        return HStack(spacing: 10) {
+            AppIconView(image: item.icon.flatMap { AppIcons.small(bundleID: $0) })
+            VStack(alignment: .leading, spacing: 1) {
+                Text(item.id).lineLimit(1)
+                if let note = WriterTips.note(key: item.key) {
+                    Text(note).font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                }
+            }
+            Spacer()
+            Text(item.value).monospacedDigit().foregroundStyle(.secondary)
+            QuitSlot(app: app, canQuit: app != nil) { $0.terminate() }
+        }
+        .contentShape(Rectangle())
+        .contextMenu {
+            if let app {
+                Button(tr("Затвори", "Quit")) { app.terminate() }
+            }
+            if let installed {
+                Button(tr("Покажи във Finder", "Show in Finder")) { NSWorkspace.shared.activateFileViewerSelecting([installed]) }
+                Divider()
+                Button(tr("Премести в кошчето…", "Move to Trash…")) { trashing = item }
+            }
+            if app == nil && installed == nil {
+                Text(tr("Част от macOS: не може да се затвори или изтрие", "Part of macOS: can't be quit or removed"))
+            }
+        }
+        .help(installed != nil ? tr("Десен бутон: покажи във Finder или премести в кошчето",
+                                    "Right-click: show in Finder or move to the Trash") : "")
+    }
+
+    private func restRow(_ value: Double) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: "applelogo").foregroundStyle(.secondary).frame(width: 22, height: 22)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(tr("Останалото: macOS и кратки програми", "The rest: macOS and short-lived programs")).lineLimit(1)
+                Text(tr("Swap, Spotlight, системни дневници. Нормално.", "Swap, Spotlight, system logs. Normal."))
+                    .font(.caption)
+            }
+            .foregroundStyle(.secondary)
+            Spacer()
+            Text(period == 0 ? speedText(value) : bytesText(value)).monospacedDigit().foregroundStyle(.secondary)
+            QuitSlot(app: nil, canQuit: false) { _ in }
+        }
+        .help(tr("Колкото е отчело самото SSD, минус приложенията отгоре: swap, индексът на Spotlight, системните дневници, Time Machine и програми, приключили за по-малко от минута.",
+                 "What the SSD itself counted, minus the apps above: swap, the Spotlight index, system logs, Time Machine and programs that ended within a minute."))
+    }
+
+    private func trash(_ item: Item) {
+        guard let url = WriterTips.installed(item.key) else { return }
+        result = tr("Затварям \(item.id)…", "Quitting \(item.id)…")
+        WriterTips.quitAndTrash(key: item.key, url: url) { done in
+            result = done
+                ? tr("\(item.id) е в кошчето. Можеш да го върнеш оттам.", "\(item.id) is in the Trash. You can put it back from there.")
+                : tr("\(item.id) не се затвори (може би пита да запазиш нещо). Затвори го и опитай пак.",
+                     "\(item.id) didn't quit (it may be asking to save something). Quit it and try again.")
+        }
     }
 
     private var footer: String {
+        if period == 0 {
+            return tr("Колко пише всяко приложение в момента; обновява се на 2 секунди, само докато гледаш. Десен бутон върху приложение: Finder или кошчето.",
+                      "How fast each app is writing right now, updated every 2 seconds while you look. Right-click an app: Finder or the Trash.")
+        }
         var text = tr("Колко е записало всяко приложение на диска; проверява се веднъж на минута. Части от macOS, които искат админ права (swap, част от Spotlight, Time Machine), и програми, приключили за секунди, не се виждат поотделно: те са в „Останалото“.",
                       "How much each app wrote to the disk, checked once a minute. Parts of macOS that need admin rights (swap, part of Spotlight, Time Machine) and programs that ended within seconds can't be seen one by one: they're in “The rest”.")
         let start = writers.countingSince
-        let periodStart = Calendar.current.startOfDay(for: Calendar.current.date(byAdding: .day, value: week ? -6 : 0, to: Date()) ?? Date())
+        let periodStart = Calendar.current.startOfDay(for: Calendar.current.date(byAdding: .day, value: -(period - 1), to: Date()) ?? Date())
         if start > periodStart {   // the list doesn't cover the whole period yet
             let format = DateFormatter()
             format.dateFormat = "d.MM HH:mm"

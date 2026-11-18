@@ -37,7 +37,7 @@
   </tr>
   <tr>
     <td><img src="docs/energy.png" alt="Energy page"><br><b>Energy</b>: watts per app as measured by macOS, energy per day and what it costs</td>
-    <td><img src="docs/disk.png" alt="Disk page"><br><b>Disk</b>: free space, read/write speed, clearing app caches, SSD health straight from the drive, and which apps write the most to it</td>
+    <td><img src="docs/disk.png" alt="Disk page"><br><b>Disk</b>: free space, read/write speed, clearing app caches, SSD health straight from the drive, and which apps write the most to it (right now, today, 7 or 30 days), what each one is, and quitting or moving an app to the Trash</td>
   </tr>
   <tr>
     <td><img src="docs/network.png" alt="Network page"><br><b>Network</b>: speed, latency, Wi-Fi signal, data per app today and how much of it on an iPhone hotspot</td>
@@ -76,7 +76,7 @@ After that it updates itself (Settings → Updates). Every update is signed, and
 ## Light by design
 
 - Native Swift, no Electron. The only helper is macOS's own `nettop`, which counts data per app and uses next to no CPU (a watchdog stops it if that ever changes).
-- Numbers you hide from the menu bar aren't read at all. Counting SSD writes per app is a 5 ms check once a minute. Scanning every process and reading the detailed sensors happen only while their page or the menu is open; app icons are drawn once and kept.
+- Numbers you hide from the menu bar aren't read at all. Counting SSD writes per app is a 5 ms check once a minute (every 2 seconds only while the Disk page shows “Now”). Scanning every process and reading the detailed sensors happen only while their page or the menu is open; app icons are drawn once and kept.
 - Measured on an M5 MacBook Air: with only the menu bar, about 0.5% of one core (0.05% of the whole 10-core chip) and under 20 MB of memory. With the window open on the busiest page (CPU), about 1%.
 
 ## Privacy
