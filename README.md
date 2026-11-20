@@ -17,11 +17,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/menubar.png" width="234" alt="MacGlance in the menu bar, dark and light">
-</p>
-
-<p align="center">
-  <img src="docs/cpu.png" width="720" alt="The CPU page: load, per-core meters with a detail panel, history">
+  <img src="docs/demo.webp" width="820" alt="MacGlance in action: the menu bar readout, then the CPU, GPU, RAM, Disk, Network, Energy and Battery pages with live numbers">
 </p>
 
 ## What it shows
